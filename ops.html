@@ -1,0 +1,2412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Smarticlab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0F1726; --navy-soft:#1C2740; --green:#0EA55A; --green-bg:#C9F5DC; --green-bg-soft:#E7FBF0;
+    --bg:#F6F7F9; --card:#FFFFFF; --border:#E7E9EE; --text:#12141B; --muted:#6B7280;
+    --danger:#D64545; --danger-bg:#FDEEEE; --amber:#946200; --amber-bg:#FFF1CC;
+    --radius-lg:22px; --radius-md:14px; --radius-sm:10px; --shadow:0 2px 10px rgba(15,23,38,0.05);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:'Poppins',system-ui,sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased;}
+
+  /* ===================== LOGIN SCREEN ===================== */
+  #loginScreen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    background:var(--navy);
+    background-image:radial-gradient(circle at 20% 20%, rgba(14,165,90,0.15), transparent 40%), radial-gradient(circle at 80% 80%, rgba(14,165,90,0.1), transparent 40%);
+  }
+  .login-wrap{width:100%; max-width:380px;}
+  .brand{display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:22px;}
+  .brand .mark{width:42px; height:42px; border-radius:50%; background:var(--green); color:#062; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;}
+  .brand span{color:#fff; font-weight:700; font-size:15px; letter-spacing:.04em;}
+  .login-card{background:var(--card); border-radius:var(--radius-lg); padding:30px 26px; box-shadow:0 20px 50px rgba(0,0,0,.35);}
+  .eyebrow{font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--green); margin-bottom:6px;}
+  .login-card h1{font-size:22px; font-weight:800; margin-bottom:6px;}
+  .login-card .sub{font-size:13px; color:var(--muted); margin-bottom:22px; line-height:1.5;}
+  .field{
+    display:flex; align-items:center; gap:10px; background:var(--bg); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:14px;
+  }
+  .field:focus-within{border-color:var(--green);}
+  .field input{border:none; background:transparent; outline:none; width:100%; font-size:15px; font-family:inherit; color:var(--text);}
+  .field input::placeholder{color:#9AA0AC;}
+  .field svg{width:17px; height:17px; stroke:var(--green); flex:none;}
+  .btn{
+    width:100%; padding:15px; border:none; border-radius:var(--radius-sm); background:var(--navy); color:#fff;
+    font-family:inherit; font-size:15px; font-weight:700; cursor:pointer;
+  }
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn:active:not(:disabled){opacity:.85;}
+  .login-error{
+    display:none; background:var(--danger-bg); border:1px solid #F2B9B9; border-radius:var(--radius-sm);
+    padding:11px 13px; margin-bottom:14px; font-size:12.5px; color:#9E2B2B; font-weight:600;
+  }
+  .login-error.show{display:block;}
+  .foot-note{text-align:center; margin-top:18px; font-size:11.5px; color:#8b93a3;}
+
+  /* ===================== REQUESTS SCREEN ===================== */
+  #requestsScreen{display:none;}
+
+  .topbar{
+    background:var(--navy); color:#fff; padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    position:sticky; top:0; z-index:10; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{display:flex; align-items:center; gap:10px; margin-bottom:0;}
+  .topbar .mark{width:34px; height:34px; font-size:12px;}
+  .topbar h1{font-size:15px; font-weight:700;}
+  .topbar .sub{font-size:11.5px; color:#9AA6B8;}
+  .logout-btn{background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); color:#fff; padding:8px 14px; border-radius:20px; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;}
+
+  /* ================= SHELL: sidebar (desktop) / drawer (mobile) ================= */
+  .sidebar{
+    position:fixed; top:0; left:0; bottom:0; width:248px; z-index:120;
+    background:#0F1726; color:#E6EAF0; display:flex; flex-direction:column;
+    padding:18px 12px; overflow-y:auto; transition:transform .22s ease;
+  }
+  .sb-brand{display:flex; align-items:center; gap:10px; padding:4px 8px 18px;}
+  .sb-brand img{height:30px; width:auto; filter:brightness(0) invert(1);}
+  .sb-brand .t{font-size:14px; font-weight:800; letter-spacing:.02em;}
+  .sb-brand .s{font-size:11px; color:#8C97AA;}
+  .sb-sec{font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:#6F7B90; padding:14px 10px 6px;}
+  .nav-item{
+    display:flex; align-items:center; gap:10px; width:100%; padding:10px 10px; border-radius:10px;
+    background:transparent; border:none; color:#C9D1DD; font-family:inherit; font-size:13.5px; font-weight:600;
+    cursor:pointer; text-align:left;
+  }
+  .nav-item:hover{background:rgba(255,255,255,.06); color:#fff;}
+  .nav-item.active{background:#0EA55A; color:#fff;}
+  .nav-item .ic{width:20px; text-align:center; flex:none;}
+  .nav-item .ct{margin-left:auto; min-width:22px; padding:1px 7px; border-radius:10px; background:rgba(255,255,255,.1); font-size:11px; font-weight:700; text-align:center;}
+  .nav-item.active .ct{background:rgba(255,255,255,.25);}
+  .nav-item .ct.hot{background:#F5A623; color:#1A1200;}
+  .sb-foot{margin-top:auto; padding-top:14px; border-top:1px solid rgba(255,255,255,.08);}
+  .sb-overlay{display:none; position:fixed; inset:0; background:rgba(8,12,20,.5); z-index:110;}
+
+  #requestsScreen{padding-left:248px;}
+  body:not(.authed) .sidebar, body:not(.authed) .sb-overlay{display:none !important;}
+  .menu-btn{display:none; width:40px; height:40px; border-radius:12px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); color:#fff; font-size:18px; cursor:pointer; flex:none;}
+  .topbar .view-title{font-size:16px; font-weight:800;}
+  .topbar .view-sub{font-size:11.5px; color:#9AA6B8;}
+
+  @media (max-width:900px){
+    #requestsScreen{padding-left:0;}
+    .sidebar{transform:translateX(-100%); box-shadow:10px 0 30px rgba(0,0,0,.3);}
+    body.sb-open .sidebar{transform:none;}
+    body.sb-open .sb-overlay{display:block;}
+    .menu-btn{display:flex; align-items:center; justify-content:center;}
+  }
+
+  /* ================= Return / Exchange switch ================= */
+  .type-switch{display:flex; gap:6px; padding:16px 20px 0; max-width:900px; margin:0 auto; width:100%;}
+  .type-switch button{
+    flex:1; padding:11px 8px; border-radius:12px; border:1px solid var(--border); background:var(--card);
+    font-family:inherit; font-size:13px; font-weight:700; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:7px;
+  }
+  .type-switch button b{font-size:11px; padding:1px 8px; border-radius:10px; background:var(--bg); color:var(--text);}
+  .type-switch button.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .type-switch button.active b{background:rgba(255,255,255,.18); color:#fff;}
+  .type-switch button.ret.active{background:#B23434; border-color:#B23434;}
+  .type-switch button.exc.active{background:#0EA55A; border-color:#0EA55A;}
+
+  .stats{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--border);}
+  .stats .stat{cursor:pointer;}
+  .stats .stat:active{opacity:.8;}
+  .stats .stat.returns .num{color:#B23434;}
+  .stats .stat.exchanges .num{color:#0EA55A;}
+  .tabs{display:none;}
+  .stats .stat{background:var(--card); padding:14px 12px;}
+  .stats .stat .num{font-size:22px; font-weight:800;}
+  .stats .stat .lbl{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-top:2px;}
+  .stats .stat.pending .num{color:var(--amber);}
+  .stats .stat.approved .num{color:var(--green);}
+  .stats .stat.disapproved .num{color:var(--danger);}
+  .stats .stat.awbpending .num{color:#B8590A;}
+  @media (max-width:640px){ .stats{grid-template-columns:repeat(3,1fr);} }
+
+  .tabs{display:flex; gap:8px; padding:16px 20px 0; flex-wrap:wrap;}
+  .tab{
+    padding:8px 16px; border-radius:20px; font-size:13px; font-weight:600; cursor:pointer;
+    background:var(--card); border:1px solid var(--border); color:var(--muted);
+  }
+  .tab.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+
+  .toolbar{padding:14px 20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .toolbar input{
+    flex:1; min-width:200px; padding:11px 14px; border-radius:20px; border:1px solid var(--border);
+    font-family:inherit; font-size:13px; background:var(--card); outline:none;
+  }
+  .toolbar input:focus{border-color:var(--green);}
+  .refresh-btn{
+    background:var(--card); border:1px solid var(--border); border-radius:20px; padding:10px 16px;
+    font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; color:var(--text);
+  }
+
+  .list{padding:6px 20px 60px; display:flex; flex-direction:column; gap:12px; max-width:900px; margin:0 auto; width:100%;}
+
+  .req-card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 20px; box-shadow:var(--shadow);}
+  .req-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;}
+  .req-order{font-size:14.5px; font-weight:800; color:var(--navy);}
+  .req-date{font-size:11.5px; color:var(--muted); margin-top:2px;}
+  .badge{font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:20px; white-space:nowrap; text-transform:uppercase; letter-spacing:.03em;}
+  .badge.pending{background:var(--amber-bg); color:var(--amber);}
+  .badge.approved{background:var(--green-bg); color:#0A7A42;}
+  .badge.disapproved{background:var(--danger-bg); color:#9E2B2B;}
+  .type-tag{font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:20px; margin-right:6px;}
+  .type-tag.return{background:var(--danger-bg); color:var(--danger);}
+  .type-tag.exchange{background:var(--green-bg-soft); color:#0A7A42;}
+
+  .req-product{font-size:14px; font-weight:600; margin-bottom:4px;}
+  .req-meta{font-size:12.5px; color:var(--muted); line-height:1.6; margin-bottom:10px;}
+  .req-meta b{color:var(--text); font-weight:600;}
+
+  .req-address{background:var(--bg); border-radius:var(--radius-sm); padding:11px 13px; font-size:12px; color:var(--text); line-height:1.5; margin-bottom:12px;}
+  .req-address .lbl{font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:3px; display:block;}
+
+  .req-actions{display:flex; gap:10px;}
+  .admin-note-box{
+    width:100%; min-height:44px; resize:vertical; margin-bottom:10px; padding:9px 11px;
+    border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px; outline:none;
+  }
+  .admin-note-box:focus{border-color:var(--navy);}
+  .act-btn{
+    flex:1; min-width:0; padding:11px; border-radius:var(--radius-sm); font-size:13px; font-weight:700; cursor:pointer;
+    border:1px solid var(--border); font-family:inherit;
+  }
+  .act-btn.approve{background:var(--green-bg-soft); border-color:var(--green); color:#0A7A42;}
+  .act-btn.disapprove{background:var(--danger-bg); border-color:#F2B9B9; color:var(--danger);}
+  .act-btn:disabled{opacity:.5; cursor:not-allowed;}
+  .decided-note{font-size:12px; color:var(--muted); font-style:italic;}
+  .awb-tag{display:inline-flex; align-items:center; gap:5px; margin-top:6px; font-size:11.5px; font-weight:700; color:#0A7A42; background:var(--green-bg-soft); border:1px solid var(--green); border-radius:20px; padding:4px 11px;}
+
+  .awb-optional-lbl{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px;}
+  .awb-row{display:flex; gap:8px; margin-bottom:10px;}
+  .awb-row input{
+    flex:1; min-width:0; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    font-family:inherit; font-size:12.5px; outline:none;
+  }
+  .awb-row input:focus{border-color:var(--green);}
+
+  .awb-pending-box{background:var(--amber-bg); border:1px solid #F0D28A; border-radius:var(--radius-sm); padding:12px 13px; margin-bottom:4px;}
+  .awb-pending-box .awb-pending-lbl{font-size:11px; font-weight:700; color:var(--amber); text-transform:uppercase; letter-spacing:.04em; margin-bottom:9px; display:flex; align-items:center; gap:6px;}
+  .save-awb-btn{
+    width:100%; padding:11px; border-radius:var(--radius-sm); font-size:13px; font-weight:700; cursor:pointer;
+    border:1px solid var(--navy); background:var(--navy); color:#fff; font-family:inherit; margin-top:2px;
+  }
+  .save-awb-btn:disabled{opacity:.5; cursor:not-allowed;}
+
+  .pickup-panel{background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; margin:8px 0; font-size:12px; line-height:1.6;}
+  .pickup-panel-title{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px;}
+  .pickup-panel-row{color:var(--text);}
+
+  .pickup-generated-box{background:var(--green-bg-soft); border:1px solid var(--green); border-radius:var(--radius-sm); padding:12px 13px; margin-top:8px;}
+  .batch-group{border:2px dashed var(--navy); border-radius:var(--radius-lg); padding:12px; margin-bottom:16px; background:#F7F9FC;}
+  .batch-group-header{font-size:12px; font-weight:800; color:var(--navy); text-transform:uppercase; letter-spacing:.03em; margin-bottom:10px;}
+  .batch-group .req-card{margin-bottom:10px;}
+  .batch-group-actions{margin-top:4px;}
+  .ops-panel{background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 13px; margin-top:8px; font-size:12px; line-height:1.6;}
+  /* ---------- Exchange replacement planner ---------- */
+  .plan-box{margin-top:10px; background:#F6F9F7; border:1px solid #D9E7DF; border-radius:12px; padding:12px;}
+  .plan-demand{background:#FFF8E8; border:1px solid #F0E0B8; border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12.5px; line-height:1.6;}
+  .plan-demand b{color:#7A5B12;}
+  .plan-lbl{font-size:11px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); margin:10px 0 5px;}
+  .plan-input{width:100%; padding:9px 11px; border-radius:10px; border:1px solid var(--border); font-family:inherit; font-size:12.5px; background:#fff;}
+  .plan-products{max-height:230px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; background:#fff; margin-top:6px;}
+  .plan-prod{display:flex; align-items:center; gap:10px; padding:8px 10px; cursor:pointer; border-bottom:1px solid #F0F2F5;}
+  .plan-prod:last-child{border-bottom:none;}
+  .plan-prod:hover{background:#F7FAF8;}
+  .plan-prod.sel{background:#E8F5EE;}
+  .plan-prod img{width:36px; height:36px; border-radius:8px; object-fit:cover; flex:none; background:#F0F2F5;}
+  .plan-prod .pp-name{font-size:12.5px; font-weight:600; line-height:1.3;}
+  .plan-prod .pp-meta{font-size:11px; color:var(--muted);}
+  .plan-prod .pp-orig{font-size:10px; font-weight:800; color:var(--green); letter-spacing:.05em;}
+  .plan-vars{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
+  .plan-var{padding:7px 12px; border-radius:9px; border:1px solid var(--border); background:#fff; font-size:12.5px; font-weight:600; cursor:pointer;}
+  .plan-var.sel{background:var(--green); color:#fff; border-color:var(--green);}
+  .plan-var.oos{opacity:.4; cursor:not-allowed; text-decoration:line-through;}
+  .plan-pay{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;}
+  .plan-pay button{flex:1; min-width:86px; padding:9px 6px; border-radius:9px; border:1px solid var(--border); background:#fff; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;}
+  .plan-pay button.sel{background:var(--green); color:#fff; border-color:var(--green);}
+  .plan-saved{background:#E8F5EE; border:1px solid #BFE0CD; border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.6; margin-top:8px;}
+  .plan-saved b{color:#1F6B42;}
+  .ops-panel-title{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px;}
+  .ops-panel-row{color:var(--text);}
+  .ops-done-lbl{font-size:12px; font-weight:700; color:#0A7A42; margin-top:4px;}
+  .pickup-generated-lbl{font-size:12px; font-weight:700; color:#0A7A42; margin-bottom:4px;}
+
+  #trackModalOverlay{
+    display:none; position:fixed; inset:0; background:rgba(15,23,38,.55); z-index:210;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  #trackModalOverlay.show{display:flex;}
+  #logModalOverlay{
+    display:none; position:fixed; inset:0; background:rgba(15,23,38,.55); z-index:210;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  #logModalOverlay.show{display:flex;}
+  .log-item{border-left:2px solid var(--border); padding:2px 0 14px 14px; margin-left:4px; position:relative;}
+  .log-item::before{content:''; position:absolute; left:-5px; top:4px; width:8px; height:8px; border-radius:50%; background:var(--navy);}
+  .log-item-title{font-size:12.5px; font-weight:700; text-transform:capitalize;}
+  .log-item-note{font-size:12px; color:var(--text); margin-top:2px;}
+  .log-item-time{font-size:11px; color:var(--muted); margin-top:2px;}
+  .track-modal{background:var(--card); border-radius:var(--radius-lg); width:100%; max-width:420px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .track-modal h2{font-size:16px; font-weight:800; margin-bottom:2px;}
+  .track-modal .sub{font-size:12px; color:var(--muted); margin-bottom:14px;}
+  .track-status{font-size:13px; font-weight:700; color:#0A7A42; background:var(--green-bg-soft); border-radius:var(--radius-sm); padding:9px 12px; margin-bottom:14px;}
+  .track-item{border-left:2px solid var(--border); padding:2px 0 12px 14px; margin-left:4px; position:relative;}
+  .track-item::before{content:''; position:absolute; left:-5px; top:4px; width:8px; height:8px; border-radius:50%; background:var(--green);}
+  .track-item-title{font-size:12.5px; font-weight:600;}
+  .track-item-time{font-size:11px; color:var(--muted);}
+  .track-photos{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .track-qc{margin-top:14px; border-top:1px dashed var(--border); padding-top:12px;}
+  .track-qc-title{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:8px;}
+  .track-qc-row{font-size:12.5px; margin-bottom:10px;}
+  .qc-pass{color:#0A7A42; font-weight:600;}
+  .qc-fail{color:#9E2B2B; font-weight:600;}
+  .qc-pending{color:var(--muted);}
+  .track-photos img{width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--border);}
+  .track-close-btn{width:100%; margin-top:8px; padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--card); font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer;}
+
+  .delete-req-btn{
+    width:100%; margin-top:10px; padding:11px; border-radius:var(--radius-sm); border:1px solid #F2B9B9;
+    background:var(--danger-bg); color:#9E2B2B; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer;
+  }
+  .delete-req-btn:hover{background:#F7D6D6;}
+
+  /* Deleted tab — neutral, no status colors or action buttons */
+  .neutral-card{background:var(--bg); border-color:var(--border);}
+  .neutral-card .req-order{color:var(--text);}
+
+  .empty, .loading{text-align:center; padding:60px 20px; color:var(--muted); font-size:13.5px;}
+  .spinner{width:26px; height:26px; border:3px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 14px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  #toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:var(--navy); color:#fff; padding:13px 20px; border-radius:14px; font-size:13.5px; font-weight:600;
+    max-width:90%; text-align:center; z-index:100; transition:all .25s ease; pointer-events:none;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* ===================== EXTEND WINDOW MODAL ===================== */
+  #extendModalOverlay{
+    display:none; position:fixed; inset:0; background:rgba(15,23,38,.55); z-index:200;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  #extendModalOverlay.show{display:flex;}
+  #cancelPickupOverlay{
+    display:none; position:fixed; inset:0; background:rgba(15,23,38,.55); z-index:200;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  #cancelPickupOverlay.show{display:flex;}
+  #settingsOverlay{
+    display:none; position:fixed; inset:0; background:rgba(15,23,38,.55); z-index:200;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  #settingsOverlay.show{display:flex;}
+  .extend-modal{background:var(--card); border-radius:var(--radius-lg); width:100%; max-width:440px; padding:22px 22px 24px; box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .extend-modal h2{font-size:17px; font-weight:800; margin-bottom:4px;}
+  .extend-modal .sub{font-size:12.5px; color:var(--muted); margin-bottom:18px; line-height:1.5;}
+  .extend-modal label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:block; margin-bottom:6px;}
+  .extend-row{display:flex; gap:8px; margin-bottom:14px;}
+  .extend-row input[type="text"]{
+    flex:1; min-width:0; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    font-family:inherit; font-size:14px; outline:none;
+  }
+  .extend-row input[type="text"]:focus{border-color:var(--green);}
+  .extend-fetch-btn{flex-shrink:0; white-space:nowrap; padding:12px 16px; border-radius:var(--radius-sm); border:1px solid var(--navy); background:var(--navy); color:#fff; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;}
+  .extend-fetch-btn:disabled{opacity:.5; cursor:not-allowed;}
+  .extend-order-info{background:var(--bg); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px; font-size:12.5px; color:var(--text); line-height:1.7; display:none;}
+  .extend-order-info.show{display:block;}
+  .extend-order-info b{font-weight:700;}
+  .extend-field{margin-bottom:14px;}
+  .extend-field input[type="date"], .extend-field textarea{
+    width:100%; padding:11px 13px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    font-family:inherit; font-size:13.5px; outline:none;
+  }
+  .extend-field input[type="date"]:focus, .extend-field textarea:focus{border-color:var(--green);}
+  .extend-quick-row{display:flex; gap:8px; margin-bottom:14px;}
+  .extend-quick-btn{
+    flex:1; min-width:0; padding:9px 6px; border-radius:20px; border:1px solid var(--border); background:var(--card);
+    font-family:inherit; font-size:11.5px; font-weight:700; color:var(--navy); cursor:pointer; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  .extend-quick-btn:hover{border-color:var(--green); color:#0A7A42;}
+  .extend-actions{display:flex; gap:10px; margin-top:18px;}
+  .extend-save-btn{
+    flex:1; min-width:0; padding:13px; border-radius:var(--radius-sm); border:1px solid var(--green); background:var(--green);
+    color:#fff; font-family:inherit; font-size:13.5px; font-weight:700; cursor:pointer;
+  }
+  .extend-save-btn:disabled{opacity:.5; cursor:not-allowed;}
+  .extend-close-btn{
+    flex-shrink:0; white-space:nowrap; padding:13px 16px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--card);
+    font-family:inherit; font-size:13.5px; font-weight:600; color:var(--text); cursor:pointer;
+  }
+  .extend-error{display:none; background:var(--danger-bg); border:1px solid #F2B9B9; border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:14px; font-size:12px; color:#9E2B2B; font-weight:600;}
+  .extend-error.show{display:block;}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="loginScreen">
+  <div class="login-wrap">
+    <div class="brand"><div class="mark">SL</div><span>SMARTICLAB ADMIN</span></div>
+    <div class="login-card">
+      <div class="eyebrow">Returns &amp; Exchange</div>
+      <h1>Admin Login</h1>
+      <p class="sub">Enter the admin password to view and process return/exchange requests.</p>
+
+      <div class="login-error" id="loginError">Wrong password. Please try again.</div>
+
+      <div class="field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+        <input type="password" id="passwordInput" placeholder="Admin password" autocomplete="current-password">
+      </div>
+
+      <button class="btn" id="loginBtn" onclick="doLogin()">Login</button>
+    </div>
+    <div class="foot-note">Access is restricted. Contact the store owner for the password.</div>
+  </div>
+</div>
+
+<!-- ===================== REQUESTS SCREEN ===================== -->
+<div class="sb-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <img src="https://smarticlab.in/wp-content/uploads/2026/05/sing-png.png" alt="" onerror="this.style.display='none'">
+    <div><div class="t">SMARTICLAB</div><div class="s">Returns &amp; Exchanges</div></div>
+  </div>
+
+  <div class="sb-sec">Requests</div>
+  <button class="nav-item" data-type="all" onclick="setType('all')"><span class="ic">📋</span>All Requests<span class="ct" id="navAll">0</span></button>
+  <button class="nav-item" data-type="Return" onclick="setType('Return')"><span class="ic">↩️</span>Returns<span class="ct" id="navReturn">0</span></button>
+  <button class="nav-item" data-type="Exchange" onclick="setType('Exchange')"><span class="ic">🔄</span>Exchanges<span class="ct" id="navExchange">0</span></button>
+
+  <div class="sb-sec">Pipeline</div>
+  <button class="nav-item" data-filter="pending" onclick="setFilter('pending')"><span class="ic">⏳</span>Needs Decision<span class="ct" id="navPending">0</span></button>
+  <button class="nav-item" data-filter="awb_pending" onclick="setFilter('awb_pending')"><span class="ic">📦</span>Pickup to Generate<span class="ct" id="navAwb">0</span></button>
+  <button class="nav-item" data-filter="qc_pending" onclick="setFilter('qc_pending')"><span class="ic">🔍</span>QC Pending<span class="ct" id="navQc">0</span></button>
+  <button class="nav-item" data-filter="approved" onclick="setFilter('approved')"><span class="ic">✅</span>Approved<span class="ct" id="navApproved">0</span></button>
+  <button class="nav-item" data-filter="disapproved" onclick="setFilter('disapproved')"><span class="ic">⛔</span>Rejected<span class="ct" id="navRejected">0</span></button>
+
+  <div class="sb-sec">Other</div>
+  <button class="nav-item" data-filter="extended" onclick="setFilter('extended')"><span class="ic">🕐</span>Extended Windows</button>
+  <button class="nav-item" data-filter="deleted" onclick="setFilter('deleted')"><span class="ic">🗑</span>Deleted</button>
+
+  <div class="sb-foot">
+    <button class="nav-item" onclick="closeSidebar(); openExtendWindow()"><span class="ic">⏱</span>Extend Window</button>
+    <button class="nav-item" onclick="closeSidebar(); openCancelPickup()"><span class="ic">❌</span>Cancel Pickup</button>
+    <button class="nav-item" onclick="closeSidebar(); openSettings()"><span class="ic">⚙️</span>Settings</button>
+    <button class="nav-item" onclick="logout()"><span class="ic">🚪</span>Logout</button>
+  </div>
+</aside>
+
+<div id="requestsScreen">
+  <div class="topbar">
+    <div class="brand">
+      <button class="menu-btn" onclick="openSidebar()" aria-label="Menu">☰</button>
+      <div><div class="view-title" id="viewTitle">All Requests</div><div class="view-sub" id="viewSub">Smarticlab Admin</div></div>
+    </div>
+    <button class="logout-btn" onclick="refreshCurrent()">↻ Refresh</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat" onclick="setFilter('all')"><div class="num" id="statTotal">0</div><div class="lbl">Total</div></div>
+    <div class="stat returns" onclick="setType('Return')"><div class="num" id="statReturns">0</div><div class="lbl">Returns</div></div>
+    <div class="stat exchanges" onclick="setType('Exchange')"><div class="num" id="statExchanges">0</div><div class="lbl">Exchanges</div></div>
+    <div class="stat pending" onclick="setFilter('pending')"><div class="num" id="statPending">0</div><div class="lbl">Needs Decision</div></div>
+    <div class="stat awbpending" onclick="setFilter('awb_pending')"><div class="num" id="statAwbPending">0</div><div class="lbl">Pickup Pending</div></div>
+    <div class="stat awbpending" onclick="setFilter('qc_pending')"><div class="num" id="statQcPending">0</div><div class="lbl">QC Pending</div></div>
+    <span id="statApproved" hidden></span><span id="statDisapproved" hidden></span>
+  </div>
+
+  <div class="type-switch" id="typeSwitch">
+    <button data-type="all" onclick="setType('all')">All <b id="tsAll">0</b></button>
+    <button class="ret" data-type="Return" onclick="setType('Return')">↩️ Returns <b id="tsReturn">0</b></button>
+    <button class="exc" data-type="Exchange" onclick="setType('Exchange')">🔄 Exchanges <b id="tsExchange">0</b></button>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-filter="all" onclick="setFilter('all')">All</div>
+    <div class="tab" data-filter="pending" onclick="setFilter('pending')">Pending</div>
+    <div class="tab" data-filter="approved" onclick="setFilter('approved')">Approved</div>
+    <div class="tab" data-filter="disapproved" onclick="setFilter('disapproved')">Disapproved</div>
+    <div class="tab" data-filter="awb_pending" onclick="setFilter('awb_pending')">📦 AWB Pending</div>
+    <div class="tab" data-filter="qc_pending" onclick="setFilter('qc_pending')">🔍 QC Pending</div>
+    <div class="tab" data-filter="extended" onclick="setFilter('extended')">🕐 Extended</div>
+    <div class="tab" data-filter="deleted" onclick="setFilter('deleted')">🗑 Deleted</div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="Search order no, customer, product..." oninput="renderList()">
+  </div>
+
+  <div class="list" id="list">
+    <div class="loading"><div class="spinner"></div>Loading requests...</div>
+  </div>
+</div>
+
+<div id="extendModalOverlay">
+  <div class="extend-modal">
+    <h2>Extend Return / Exchange Window</h2>
+    <div class="sub">Policy ke hisaab se 7 din ki window hoti hai. Order number daalo, current dates fetch karo, phir naya date select karke save karo.</div>
+
+    <div class="extend-error" id="extendError"></div>
+
+    <label>Order Number</label>
+    <div class="extend-row">
+      <input type="text" id="extendOrderNo" placeholder="e.g. 1978">
+      <button class="extend-fetch-btn" id="extendFetchBtn" onclick="fetchOrderWindow()">Fetch</button>
+    </div>
+
+    <div class="extend-order-info" id="extendOrderInfo"></div>
+
+    <div id="extendFieldsWrap" style="display:none;">
+      <div class="extend-field">
+        <label>Return Date (extended till)</label>
+        <input type="date" id="extendReturnDate">
+      </div>
+      <div class="extend-field">
+        <label>Exchange Date (extended till)</label>
+        <input type="date" id="extendExchangeDate">
+      </div>
+
+      <div class="extend-quick-row">
+        <button class="extend-quick-btn" onclick="quickExtend(5)">+5 days from today</button>
+        <button class="extend-quick-btn" onclick="quickExtend(10)">+10 days from today</button>
+      </div>
+
+      <div class="extend-field">
+        <label>Note (optional)</label>
+        <textarea id="extendNote" rows="2" placeholder="e.g. Customer was traveling, approved extra time"></textarea>
+      </div>
+    </div>
+
+    <div class="extend-actions">
+      <button class="extend-close-btn" onclick="closeExtendWindow()">Close</button>
+      <button class="extend-save-btn" id="extendSaveBtn" onclick="saveOrderWindow()" disabled>Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="cancelPickupOverlay">
+  <div class="extend-modal">
+    <h2>Cancel Reverse Pickup</h2>
+    <div class="sub">Galti se generate hui pickup ko yahan se cancel karo. AWB number daalo aur Cancel dabao — yeh Shadowfax mein pickup cancel kar dega.</div>
+
+    <div class="extend-error" id="cancelPickupError"></div>
+
+    <label>AWB Number</label>
+    <div class="extend-row">
+      <input type="text" id="cancelPickupAwb" placeholder="e.g. R24297402939" style="flex:1; min-width:0;">
+    </div>
+
+    <div class="extend-actions">
+      <button class="extend-close-btn" onclick="closeCancelPickup()">Close</button>
+      <button class="extend-save-btn" id="cancelPickupBtn" onclick="cancelPickup()" style="background:var(--danger); border-color:var(--danger);">Cancel Pickup</button>
+    </div>
+  </div>
+</div>
+
+<div id="settingsOverlay">
+  <div class="extend-modal">
+    <h2>Store Settings</h2>
+    <div class="sub">Yeh saari settings turant live ho jaati hain, customer panel pe.</div>
+
+    <div class="extend-error" id="settingsError"></div>
+
+    <label>Customer Self-Cancellation Window</label>
+    <div class="sub" style="margin-bottom:8px;">Order place hone ke kitne ghanton tak customer khud order cancel kar sakta hai. <b>0 = feature band</b> (button kabhi nahi dikhega).</div>
+    <div class="extend-row">
+      <input type="number" id="cancelWindowHours" min="0" placeholder="e.g. 0, 1, 2, 24" style="flex:1; min-width:0;">
+      <span style="flex-shrink:0; align-self:center; font-size:13px; color:var(--muted);">hours</span>
+    </div>
+
+    <div style="border-top:1px dashed var(--border); margin:16px 0 12px; padding-top:12px;">
+      <label>Override Cancellation Message (optional, per order)</label>
+      <div class="sub" style="margin-bottom:8px;">Kisi specific order ke liye default detected reason ki jagah apna custom message dikhana ho to yahan set karo.</div>
+      <input type="text" id="overrideOrderNumber" placeholder="Order number" style="width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:14px; margin-bottom:8px;">
+      <textarea id="overrideMessage" placeholder="Custom message customer ko dikhega..." style="width:100%; min-height:70px; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:14px; resize:vertical;"></textarea>
+      <button class="extend-fetch-btn" style="margin-top:8px; width:100%;" onclick="saveOverrideMessage()">Save Override for this Order</button>
+    </div>
+
+    <div class="extend-actions">
+      <button class="extend-close-btn" onclick="closeSettings()">Close</button>
+      <button class="extend-save-btn" id="settingsSaveBtn" onclick="saveCancelWindow()">Save Window Setting</button>
+    </div>
+  </div>
+</div>
+
+<div id="logModalOverlay">
+  <div class="track-modal">
+    <h2>Order Log</h2>
+    <div class="sub" id="logModalOrderNo"></div>
+    <div id="logModalBody">
+      <div class="loading"><div class="spinner"></div>Loading log...</div>
+    </div>
+    <button class="track-close-btn" onclick="closeLog()">Close</button>
+  </div>
+</div>
+
+<div id="trackModalOverlay">
+  <div class="track-modal">
+    <h2 id="trackModalTitle">Track Pickup</h2>
+    <div class="sub" id="trackModalAwb"></div>
+    <div id="trackModalBody">
+      <div class="loading"><div class="spinner"></div>Loading tracking...</div>
+    </div>
+    <button class="track-close-btn" onclick="closeTrackModal()">Close</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================================
+   CONFIG
+   ============================================================================ */
+const CONFIG = {
+  loginUrl:  "https://auto.rohitvision.com/webhook/admin-login",
+  listUrl:   "https://auto.rohitvision.com/webhook/admin-list-requests",
+  updateUrl: "https://auto.rohitvision.com/webhook/admin-update-request",
+  windowLookupUrl: "https://auto.rohitvision.com/webhook/admin-order-window-lookup",
+  windowExtendUrl: "https://auto.rohitvision.com/webhook/admin-extend-order-window",
+  windowListUrl: "https://auto.rohitvision.com/webhook/admin-list-window-overrides",
+  trackPickupUrl: "https://auto.rohitvision.com/webhook/admin-track-pickup",
+  deleteUrl: "https://auto.rohitvision.com/webhook/admin-delete-request",
+  deletedListUrl: "https://auto.rohitvision.com/webhook/admin-list-deleted-requests",
+  generateSlipUrl: "https://auto.rohitvision.com/webhook/admin-generate-delivery-slip",
+  generatePickupUrl: "https://auto.rohitvision.com/webhook/admin-generate-pickup",
+  checkServiceabilityUrl: "https://auto.rohitvision.com/webhook/admin-check-serviceability",
+  generateBatchPickupUrl: "https://auto.rohitvision.com/webhook/admin-generate-batch-pickup",
+  getSettingsUrl: "https://auto.rohitvision.com/webhook/admin-get-settings",
+  updateSettingsUrl: "https://auto.rohitvision.com/webhook/admin-update-settings",
+  markRefundUrl: "https://auto.rohitvision.com/webhook/admin-mark-refund-complete",
+  cancelPickupUrl: "https://auto.rohitvision.com/webhook/admin-cancel-pickup",
+  markQcUrl: "https://auto.rohitvision.com/webhook/admin-mark-qc",
+  recordExchangeDeliveryUrl: "https://auto.rohitvision.com/webhook/admin-record-exchange-delivery",
+  generateExShipmentUrl: "https://auto.rohitvision.com/webhook/admin-generate-exchange-shipment",
+  getLogUrl: "https://auto.rohitvision.com/webhook/admin-get-request-log",
+  listProductsUrl: "https://auto.rohitvision.com/webhook/admin-list-products",
+  productVariationsUrl: "https://auto.rohitvision.com/webhook/admin-product-variations",
+  saveExchangePlanUrl: "https://auto.rohitvision.com/webhook/admin-save-exchange-plan"
+};
+
+// Token sirf is page ke JS memory mein rehta hai — koi navigation, koi
+// browser storage nahi. Isliye local file se seedha khol ke bhi use ho sakta hai.
+let token = null;
+
+/* Refresh par logout na ho — token 12 ghante tak localStorage me rehta hai */
+const ADMIN_SESSION_KEY = 'sl_admin_session_v1';
+const ADMIN_SESSION_HOURS = 12;
+
+function saveAdminSession(t){
+  try{ localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ token: t, savedAt: Date.now() })); }catch(e){}
+}
+function readAdminSession(){
+  try{
+    const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(!s || !s.token) return null;
+    if(Date.now() - (s.savedAt || 0) > ADMIN_SESSION_HOURS * 3600000){ clearAdminSession(); return null; }
+    return s.token;
+  }catch(e){ return null; }
+}
+function clearAdminSession(){
+  try{ localStorage.removeItem(ADMIN_SESSION_KEY); }catch(e){}
+}
+let requests = [];
+let currentFilter = 'all';
+let currentType = 'all';   // 'all' | 'Return' | 'Exchange'
+let extendedWindows = [];
+let deletedRequests = [];
+
+/* ---------------------------------------------------------------------------
+   LOGIN
+   --------------------------------------------------------------------------- */
+document.getElementById('passwordInput').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') doLogin();
+});
+
+async function doLogin(){
+  const password = document.getElementById('passwordInput').value;
+  const btn = document.getElementById('loginBtn');
+  const errBox = document.getElementById('loginError');
+  errBox.classList.remove('show');
+
+  if(!password){
+    errBox.textContent = 'Please enter the password.';
+    errBox.classList.add('show');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Checking...';
+
+  try{
+    const res = await fetch(CONFIG.loginUrl, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+
+    if(data.success && data.token){
+      token = data.token;
+      saveAdminSession(token);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('requestsScreen').style.display = 'block'; document.body.classList.add('authed');
+      loadRequests();
+    }else{
+      errBox.textContent = data.message || 'Wrong password. Please try again.';
+      errBox.classList.add('show');
+    }
+  }catch(err){
+    errBox.textContent = "Couldn't reach the server. Please try again.";
+    errBox.classList.add('show');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Login';
+  }
+}
+
+function logout(){
+  clearAdminSession();
+  token = null;
+  requests = [];
+  document.getElementById('requestsScreen').style.display = 'none'; document.body.classList.remove('authed', 'sb-open');
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('passwordInput').value = '';
+}
+
+/* ---------------------------------------------------------------------------
+   REQUESTS LIST
+   --------------------------------------------------------------------------- */
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+async function loadRequests(){
+  document.getElementById('list').innerHTML = `<div class="loading"><div class="spinner"></div>Loading requests...</div>`;
+  try{
+    const res = await fetch(CONFIG.listUrl, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    requests = (Array.isArray(data) ? data : []).map(r => ({
+      id: r.id,
+      order_number: r.order_number || r.order_id || '',
+      product_name: r.product_name || '',
+      type: r.type || 'Return',
+      reason: r.reason || '',
+      custom_reason: r.custom_reason || '',
+      identifier: r.identifier || '',
+      quantity: r.quantity || 1,
+      delivered_date: r.delivered_date || null,
+      requested_at: r.requested_at || r.created_at || null,
+      status: (r.status || 'pending').toLowerCase(),
+      pickup_name: r.pickup_name || '',
+      pickup_phone: r.pickup_phone || '',
+      pickup_address_line1: r.pickup_address_line1 || '',
+      pickup_address_line2: r.pickup_address_line2 || '',
+      pickup_city: r.pickup_city || '',
+      pickup_state: r.pickup_state || '',
+      pickup_pincode: r.pickup_pincode || '',
+      admin_note: r.admin_note || '',
+      awb_number: r.awb_number || '',
+      awb_courier: r.awb_courier || '',
+      awb_updated_at: r.awb_updated_at || null,
+      order_id: r.order_id || '',
+      desired_size: r.desired_size || '',
+      desired_color: r.desired_color || '',
+      delivery_slip_generated_at: r.delivery_slip_generated_at || null,
+      bank_account_name: r.bank_account_name || '',
+      bank_account_number: r.bank_account_number || '',
+      bank_ifsc: r.bank_ifsc || '',
+      upi_id: r.upi_id || '',
+      bank_details_submitted_at: r.bank_details_submitted_at || null,
+      refund_transaction_id: r.refund_transaction_id || '',
+      bank_details_method: r.bank_details_method || '',
+      refund_method: r.refund_method || '',
+      refund_screenshot_url: r.refund_screenshot_url || '',
+      batch_id: r.batch_id || null,
+      refund_completed_at: r.refund_completed_at || null,
+      qc_status: r.qc_status || null,
+      qc_checked_at: r.qc_checked_at || null,
+      qc_note: r.qc_note || '',
+      exchange_delivery_order_number: r.exchange_delivery_order_number || '',
+      exchange_delivery_awb: r.exchange_delivery_awb || '',
+      exchange_delivery_courier: r.exchange_delivery_courier || '',
+      exchange_delivery_generated_at: r.exchange_delivery_generated_at || null,
+      exchange_product_id: r.exchange_product_id || '',
+      exchange_variation_id: r.exchange_variation_id || '',
+      exchange_product_name: r.exchange_product_name || '',
+      exchange_size: r.exchange_size || '',
+      exchange_color: r.exchange_color || '',
+      exchange_price: r.exchange_price || null,
+      exchange_payment_mode: r.exchange_payment_mode || '',
+      exchange_cod_amount: r.exchange_cod_amount || 0,
+      exchange_plan_note: r.exchange_plan_note || '',
+      exchange_plan_saved_at: r.exchange_plan_saved_at || null
+    }));
+    renderStats();
+    renderList();
+  }catch(err){
+    document.getElementById('list').innerHTML = `<div class="empty">Couldn't load requests. Check your connection and try Refresh.</div>`;
+  }
+}
+
+function renderStats(){
+  const byType = (t) => t === 'all' ? requests : requests.filter(r => r.type === t);
+  const scope = byType(currentType);
+  const cnt = (arr, fn) => arr.filter(fn).length;
+  const isPending = r => r.status === 'pending';
+  const isAwb = r => r.status === 'approved' && !r.awb_number;
+  const isQc = r => r.status === 'approved' && !!r.awb_number && !r.qc_status;
+
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+
+  // Type counts — hamesha poore data par
+  const nAll = requests.length, nRet = byType('Return').length, nExc = byType('Exchange').length;
+  set('statTotal', scope.length);
+  set('statReturns', nRet);
+  set('statExchanges', nExc);
+  set('tsAll', nAll); set('tsReturn', nRet); set('tsExchange', nExc);
+  set('navAll', nAll); set('navReturn', nRet); set('navExchange', nExc);
+
+  // Pipeline counts — chune hue type ke andar
+  const nPend = cnt(scope, isPending), nAwb = cnt(scope, isAwb), nQc = cnt(scope, isQc);
+  set('statPending', nPend); set('statAwbPending', nAwb); set('statQcPending', nQc);
+  set('statApproved', cnt(scope, r => r.status === 'approved'));
+  set('statDisapproved', cnt(scope, r => r.status === 'disapproved'));
+  set('navPending', nPend); set('navAwb', nAwb); set('navQc', nQc);
+  set('navApproved', cnt(scope, r => r.status === 'approved'));
+  set('navRejected', cnt(scope, r => r.status === 'disapproved'));
+
+  ['navPending', 'navAwb', 'navQc'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('hot', Number(el.textContent) > 0);
+  });
+}
+
+const FILTER_LABELS = {
+  all: 'All', pending: 'Needs Decision', approved: 'Approved', disapproved: 'Rejected',
+  awb_pending: 'Pickup to Generate', qc_pending: 'QC Pending', extended: 'Extended Windows', deleted: 'Deleted'
+};
+const TYPE_LABELS = { all: 'Requests', Return: 'Returns', Exchange: 'Exchanges' };
+
+function syncNav(){
+  document.querySelectorAll('.nav-item[data-type]').forEach(b =>
+    b.classList.toggle('active', currentFilter === 'all' && b.dataset.type === currentType));
+  document.querySelectorAll('.nav-item[data-filter]').forEach(b =>
+    b.classList.toggle('active', b.dataset.filter === currentFilter));
+  document.querySelectorAll('#typeSwitch button').forEach(b =>
+    b.classList.toggle('active', b.dataset.type === currentType));
+
+  const special = currentFilter === 'extended' || currentFilter === 'deleted';
+  document.getElementById('typeSwitch').style.display = special ? 'none' : 'flex';
+
+  let title;
+  if(special) title = FILTER_LABELS[currentFilter];
+  else if(currentFilter === 'all') title = currentType === 'all' ? 'All Requests' : TYPE_LABELS[currentType];
+  else title = `${FILTER_LABELS[currentFilter]}${currentType === 'all' ? '' : ' · ' + TYPE_LABELS[currentType]}`;
+  document.getElementById('viewTitle').textContent = title;
+}
+
+function setType(t){
+  currentType = t;
+  if(currentFilter === 'extended' || currentFilter === 'deleted') currentFilter = 'all';
+  closeSidebar();
+  renderStats();
+  syncNav();
+  renderList();
+}
+
+function openSidebar(){ document.body.classList.add('sb-open'); }
+function closeSidebar(){ document.body.classList.remove('sb-open'); }
+
+function setFilter(f){
+  currentFilter = f;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.filter === f));
+  closeSidebar();
+  syncNav();
+  if(f === 'extended'){
+    loadExtendedWindows();
+  }else if(f === 'deleted'){
+    loadDeletedRequests();
+  }else{
+    renderList();
+  }
+}
+
+function refreshCurrent(){
+  if(currentFilter === 'extended') loadExtendedWindows();
+  else if(currentFilter === 'deleted') loadDeletedRequests();
+  else loadRequests();
+}
+
+/* ---------------------------------------------------------------------------
+   EXTENDED WINDOWS TAB — saare orders jinki return/exchange date manually badhayi gayi hai
+   --------------------------------------------------------------------------- */
+async function loadExtendedWindows(){
+  document.getElementById('list').innerHTML = `<div class="loading"><div class="spinner"></div>Loading extended orders...</div>`;
+  try{
+    const res = await fetch(CONFIG.windowListUrl, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    extendedWindows = (Array.isArray(data) ? data : []).filter(r => r && r.order_number).map(r => ({
+      order_number: r.order_number,
+      return_until: r.return_until || null,
+      exchange_until: r.exchange_until || null,
+      admin_note: r.admin_note || '',
+      extended_at: r.extended_at || null,
+      updated_at: r.updated_at || null
+    }));
+    renderExtendedList();
+  }catch(err){
+    document.getElementById('list').innerHTML = `<div class="empty">Couldn't load extended orders. Check your connection and try Refresh.</div>`;
+  }
+}
+
+function renderExtendedList(){
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  let items = extendedWindows;
+  if(q){
+    items = items.filter(w =>
+      w.order_number.toLowerCase().includes(q) || w.admin_note.toLowerCase().includes(q)
+    );
+  }
+  const listEl = document.getElementById('list');
+  if(items.length === 0){
+    listEl.innerHTML = `<div class="empty">Koi order manually extend nahi kiya gaya hai abhi tak.</div>`;
+    return;
+  }
+  listEl.innerHTML = items.map(w => `
+    <div class="req-card">
+      <div class="req-top">
+        <div>
+          <div class="req-order">Order #${escapeHTML(w.order_number)}</div>
+          <div class="req-date">Last changed: ${formatDate(w.updated_at) || '—'}</div>
+        </div>
+      </div>
+      <div class="req-meta">
+        <b>Return till:</b> ${formatDate(w.return_until) || '—'}<br>
+        <b>Exchange till:</b> ${formatDate(w.exchange_until) || '—'}
+        ${w.admin_note ? `<br><b>Note:</b> ${escapeHTML(w.admin_note)}` : ''}
+      </div>
+      <button class="extend-fetch-btn" style="margin-top:10px; width:100%;" onclick="openExtendWindow(); document.getElementById('extendOrderNo').value='${escapeHTML(w.order_number)}'; fetchOrderWindow();">Edit Again</button>
+    </div>
+  `).join('');
+}
+
+/* ---------------------------------------------------------------------------
+   DELETED TAB — soft-deleted requests, neutral read-only view
+   --------------------------------------------------------------------------- */
+async function loadDeletedRequests(){
+  document.getElementById('list').innerHTML = `<div class="loading"><div class="spinner"></div>Loading deleted items...</div>`;
+  try{
+    const res = await fetch(CONFIG.deletedListUrl, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    deletedRequests = (Array.isArray(data) ? data : []).filter(r => r && r.id).map(r => ({
+      id: r.id,
+      order_number: r.order_number || '',
+      product_name: r.product_name || '',
+      type: r.type || 'Return',
+      status: r.status || '',
+      requested_at: r.requested_at || r.created_at || null,
+      deleted_at: r.deleted_at || null
+    }));
+    renderDeletedList();
+  }catch(err){
+    document.getElementById('list').innerHTML = `<div class="empty">Couldn't load deleted items. Check your connection and try Refresh.</div>`;
+  }
+}
+
+function renderDeletedList(){
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  let items = deletedRequests;
+  if(q){
+    items = items.filter(r => r.order_number.toLowerCase().includes(q) || r.product_name.toLowerCase().includes(q));
+  }
+  const listEl = document.getElementById('list');
+  if(items.length === 0){
+    listEl.innerHTML = `<div class="empty">Koi deleted item nahi hai.</div>`;
+    return;
+  }
+  listEl.innerHTML = items.map(r => `
+    <div class="req-card neutral-card">
+      <div class="req-top">
+        <div>
+          <div class="req-order">Order #${escapeHTML(r.order_number)}</div>
+          <div class="req-date">Requested: ${formatDate(r.requested_at) || '—'}</div>
+        </div>
+      </div>
+      <div class="req-product" style="margin-top:6px">${escapeHTML(r.product_name)}</div>
+      <div class="req-meta">${escapeHTML(r.type)} · was ${escapeHTML(r.status)}</div>
+      <div class="req-meta" style="color:var(--muted);">Deleted: ${formatDate(r.deleted_at) || '—'}</div>
+    </div>
+  `).join('');
+}
+
+async function deleteRequest(id){
+  if(!confirm('Is request ko delete karna hai? Yeh Deleted tab mein chala jaayega.')) return;
+  try{
+    const res = await fetch(CONFIG.deleteUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    requests = requests.filter(r => r.id !== id);
+    renderStats();
+    renderList();
+    toast('Request deleted ✓');
+  }catch(err){
+    toast("Couldn't delete — please try again.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   EXCHANGE — Generate delivery slip (private WooCommerce note ke saath)
+   --------------------------------------------------------------------------- */
+async function generateSlip(id){
+  try{
+    const res = await fetch(CONFIG.generateSlipUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    const r = requests.find(x => x.id === id);
+    if(r) r.delivery_slip_generated_at = data.generated_at || new Date().toISOString();
+    renderList();
+    toast('Delivery slip generated ✓ — order note added');
+  }catch(err){
+    toast("Couldn't generate slip — please try again.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   MANUAL PICKUP GENERATION — admin khud courier choose karta hai
+   --------------------------------------------------------------------------- */
+async function checkServiceability(id){
+  const pincode = document.getElementById(`pincode-${id}`).value.trim();
+  const resultBox = document.getElementById(`serviceabilityResult-${id}`);
+  if(!pincode){
+    toast('Pincode daalo pehle.');
+    return;
+  }
+  resultBox.textContent = 'Checking...';
+  try{
+    const res = await fetch(`${CONFIG.checkServiceabilityUrl}?pincode=${encodeURIComponent(pincode)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if(data.delhivery_serviceable){
+      resultBox.innerHTML = `<span style="color:#0A7A42; font-weight:600;">✓ One Delivery (Delhivery) serviceable here</span>${data.delhivery_details ? ` — ${escapeHTML(data.delhivery_details.city || '')}` : ''}`;
+    }else{
+      resultBox.innerHTML = `<span style="color:#9E2B2B; font-weight:600;">✕ One Delivery not serviceable for this pincode</span> — try Shadowfax instead.`;
+    }
+  }catch(err){
+    resultBox.textContent = "Couldn't check right now.";
+  }
+}
+
+async function generatePickup(id, courier){
+  try{
+    const res = await fetch(CONFIG.generatePickupUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, courier })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success){
+      toast(data.pickup_error ? `Pickup failed: ${data.pickup_error}` : "Couldn't generate pickup.");
+      return;
+    }
+
+    const r = requests.find(x => x.id === id);
+    if(r){
+      r.awb_number = data.awb_number;
+      r.awb_courier = data.awb_courier;
+      r.awb_updated_at = new Date().toISOString();
+    }
+    renderList();
+    toast(`Pickup generated ✓ — AWB: ${data.awb_number}`);
+  }catch(err){
+    toast("Couldn't generate pickup — please try again.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   BATCHED REQUESTS — multiple items ek saath approve/pickup (single truck visit)
+   --------------------------------------------------------------------------- */
+async function approveBatch(batchId){
+  const items = requests.filter(r => r.batch_id === batchId && r.status === 'pending');
+  if(!items.length) return;
+  if(!confirm(`Approve all ${items.length} items in this batch?`)) return;
+
+  let okCount = 0;
+  for(const r of items){
+    try{
+      const res = await fetch(CONFIG.updateUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ id: r.id, action: 'approve', note: '', awb_number: '', awb_courier: '' })
+      });
+      const data = await res.json();
+      if(data.success){ r.status = 'approved'; okCount++; }
+    }catch(err){}
+  }
+  renderStats();
+  renderList();
+  toast(`Batch approved ✓ (${okCount}/${items.length} items)`);
+}
+
+async function generateBatchPickup(batchId){
+  try{
+    const res = await fetch(CONFIG.generateBatchPickupUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ batch_id: batchId })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success && !data.already_generated){
+      toast(data.pickup_error ? `Pickup failed: ${data.pickup_error}` : "Couldn't generate combined pickup.");
+      return;
+    }
+
+    requests.forEach(r => {
+      if(r.batch_id === batchId){
+        r.awb_number = data.awb_number;
+        r.awb_courier = data.awb_courier;
+        r.awb_updated_at = new Date().toISOString();
+      }
+    });
+    renderList();
+    toast(`Combined pickup generated ✓ — AWB: ${data.awb_number} (${data.count} items, 1 truck visit)`);
+  }catch(err){
+    toast("Couldn't generate combined pickup — please try again.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   STORE SETTINGS — cancellation window + per-order message override
+   --------------------------------------------------------------------------- */
+async function openSettings(){
+  document.getElementById('settingsOverlay').classList.add('show');
+  document.getElementById('settingsError').classList.remove('show');
+  document.getElementById('overrideOrderNumber').value = '';
+  document.getElementById('overrideMessage').value = '';
+  document.getElementById('cancelWindowHours').value = '...';
+
+  try{
+    const res = await fetch(CONFIG.getSettingsUrl, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const rows = await res.json();
+    const setting = (Array.isArray(rows) ? rows : []).find(r => r.key === 'cancellation_window_hours');
+    document.getElementById('cancelWindowHours').value = setting ? setting.value : '0';
+  }catch(err){
+    document.getElementById('cancelWindowHours').value = '0';
+  }
+}
+
+function closeSettings(){
+  document.getElementById('settingsOverlay').classList.remove('show');
+}
+
+async function saveCancelWindow(){
+  const value = document.getElementById('cancelWindowHours').value.trim();
+  const errBox = document.getElementById('settingsError');
+  errBox.classList.remove('show');
+
+  if(value === '' || isNaN(Number(value)) || Number(value) < 0){
+    errBox.textContent = 'Valid number daalo (0 ya usse zyada).';
+    errBox.classList.add('show');
+    return;
+  }
+
+  const btn = document.getElementById('settingsSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try{
+    const res = await fetch(CONFIG.updateSettingsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ key: 'cancellation_window_hours', value })
+    });
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+    toast(`Saved ✓ — customers can now cancel within ${value} hour(s) of placing an order${Number(value) === 0 ? ' (feature disabled)' : ''}.`);
+    closeSettings();
+  }catch(err){
+    errBox.textContent = "Couldn't save — please try again.";
+    errBox.classList.add('show');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Save Window Setting';
+  }
+}
+
+async function saveOverrideMessage(){
+  const orderNumber = document.getElementById('overrideOrderNumber').value.trim();
+  const message = document.getElementById('overrideMessage').value.trim();
+  const errBox = document.getElementById('settingsError');
+  errBox.classList.remove('show');
+
+  if(!orderNumber || !message){
+    errBox.textContent = 'Order number aur message dono zaroori hai.';
+    errBox.classList.add('show');
+    return;
+  }
+
+  try{
+    const res = await fetch(CONFIG.updateSettingsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ key: `cancel_override:${orderNumber}`, value: message })
+    });
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+    toast(`Override saved ✓ for order #${orderNumber}`);
+  }catch(err){
+    errBox.textContent = "Couldn't save override — please try again.";
+    errBox.classList.add('show');
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   RETURN — Mark refund complete (transaction ID ke saath)
+   --------------------------------------------------------------------------- */
+async function markRefundComplete(id){
+  const box = document.getElementById(`txn-${id}`);
+  const transaction_id = box ? box.value.trim() : '';
+  const refund_method = document.getElementById(`refundMethod-${id}`).value;
+  const refund_screenshot_url = document.getElementById(`refundProof-${id}`).value.trim();
+  if(!transaction_id){
+    toast('Transaction ID daalo pehle.');
+    return;
+  }
+  try{
+    const res = await fetch(CONFIG.markRefundUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, transaction_id, refund_method, refund_screenshot_url })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    const r = requests.find(x => x.id === id);
+    if(r){
+      r.refund_transaction_id = transaction_id;
+      r.refund_method = refund_method;
+      r.refund_screenshot_url = refund_screenshot_url;
+      r.refund_completed_at = new Date().toISOString();
+    }
+    renderList();
+    toast('Refund marked complete ✓');
+  }catch(err){
+    toast("Couldn't save — please try again.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   CANCEL PICKUP — galti se generate hui reverse pickup ko Shadowfax se cancel karna
+   --------------------------------------------------------------------------- */
+function openCancelPickup(){
+  document.getElementById('cancelPickupOverlay').classList.add('show');
+  document.getElementById('cancelPickupAwb').value = '';
+  document.getElementById('cancelPickupError').classList.remove('show');
+}
+
+function closeCancelPickup(){
+  document.getElementById('cancelPickupOverlay').classList.remove('show');
+}
+
+async function cancelPickup(){
+  const awb = document.getElementById('cancelPickupAwb').value.trim();
+  const errBox = document.getElementById('cancelPickupError');
+  errBox.classList.remove('show');
+
+  if(!awb){
+    errBox.textContent = 'AWB number daalo.';
+    errBox.classList.add('show');
+    return;
+  }
+
+  const btn = document.getElementById('cancelPickupBtn');
+  btn.disabled = true;
+  btn.textContent = 'Cancelling...';
+
+  try{
+    const res = await fetch(CONFIG.cancelPickupUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ awb })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success){
+      errBox.textContent = data.message || "Couldn't cancel pickup.";
+      errBox.classList.add('show');
+      return;
+    }
+
+    // Local list se bhi is AWB ko hata do taaki UI turant sahi dikhe
+    const r = requests.find(x => x.awb_number === awb);
+    if(r){
+      r.awb_number = '';
+      r.awb_courier = '';
+      r.awb_updated_at = null;
+    }
+    renderList();
+    toast('Pickup cancelled ✓');
+    closeCancelPickup();
+  }catch(err){
+    errBox.textContent = "Couldn't cancel pickup — please try again.";
+    errBox.classList.add('show');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Cancel Pickup';
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   EXCHANGE REPLACEMENT PLANNER
+   QC pass hone ke baad: customer ki demand dikhao, Woo se product + size chuno,
+   payment mode chuno, aur plan save karo. Yahi plan aage shipment banane me jaayega.
+   --------------------------------------------------------------------------- */
+const planState = {};   // requestId -> { products, variations, product, variation, payment_mode, cod_amount }
+
+function exchangePlannerHTML(r){
+  const saved = !!r.exchange_plan_saved_at;
+  const demand = `
+    <div class="plan-demand">
+      <div><b>Customer ne kya maanga:</b></div>
+      <div>Reason: ${escapeHTML(r.reason || '—')}${r.custom_reason ? ' — ' + escapeHTML(r.custom_reason) : ''}</div>
+      <div>Size: ${escapeHTML(r.desired_size || 'Not specified')} · Colour: ${escapeHTML(r.desired_color || 'Not specified')}</div>
+      <div>Original: ${escapeHTML(r.product_name || '')}</div>
+    </div>`;
+
+  if(saved){
+    const pay = r.exchange_payment_mode === 'cod'
+      ? `COD ₹${Number(r.exchange_cod_amount || 0).toFixed(0)}`
+      : 'Prepaid (no charge)';
+    return `
+      <div class="plan-box">
+        <div class="ops-panel-title">🎯 Replacement Planned</div>
+        ${demand}
+        <div class="plan-saved">
+          <div><b>${escapeHTML(r.exchange_product_name || '')}</b></div>
+          <div>${r.exchange_size ? 'Size ' + escapeHTML(r.exchange_size) : ''}${r.exchange_color ? ' · ' + escapeHTML(r.exchange_color) : ''}${r.exchange_price ? ' · ₹' + Number(r.exchange_price).toFixed(0) : ''}</div>
+          <div>Payment: ${escapeHTML(pay)}</div>
+          ${r.exchange_plan_note ? `<div>Note: ${escapeHTML(r.exchange_plan_note)}</div>` : ''}
+          <div style="color:var(--muted); font-size:11.5px;">Shipment order no: ${escapeHTML(r.order_number)}EX</div>
+        </div>
+        <button class="save-awb-btn" id="exGenBtn-${r.id}" style="width:100%; margin-top:10px; background:var(--green); color:#fff; border-color:var(--green); font-weight:700;" onclick="generateExShipment('${r.id}')">🚚 Generate EX Shipment (Shadowfax)</button>
+        <button class="save-awb-btn" style="width:100%; margin-top:8px;" onclick="openPlanner('${r.id}')">✏️ Change Replacement</button>
+      </div>`;
+  }
+
+  return `
+    <div class="plan-box" id="plan-${r.id}">
+      <div class="ops-panel-title">🎯 Plan Replacement</div>
+      ${demand}
+      <button class="save-awb-btn" style="width:100%;" onclick="openPlanner('${r.id}')">🛍️ Choose Replacement Product</button>
+    </div>`;
+}
+
+async function openPlanner(id){
+  const r = requests.find(x => x.id === id);
+  if(!r) return;
+  const box = document.getElementById(`plan-${id}`) || document.getElementById(`req-${id}`).querySelector('.plan-box');
+  if(!box) return;
+
+  planState[id] = planState[id] || { payment_mode: 'prepaid', cod_amount: 0 };
+  box.innerHTML = `<div class="ops-panel-title">🎯 Plan Replacement</div><div class="loading"><div class="spinner"></div>Loading products…</div>`;
+
+  try{
+    const res = await fetch(`${CONFIG.listProductsUrl}?search=`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if(res.status === 401){ toast('Session expired — log in again.'); setTimeout(logout, 1200); return; }
+    const data = await res.json();
+    planState[id].products = (data && data.products) || [];
+    renderPlanner(id);
+  }catch(err){
+    box.innerHTML = `<div class="empty">Products load nahi hue. Dobara try karo.</div>`;
+  }
+}
+
+function renderPlanner(id){
+  const r = requests.find(x => x.id === id);
+  const st = planState[id];
+  const box = document.getElementById(`plan-${id}`) || document.getElementById(`req-${id}`).querySelector('.plan-box');
+  if(!r || !st || !box) return;
+
+  const q = (st.search || '').toLowerCase();
+  const list = (st.products || []).filter(p => !q || p.name.toLowerCase().includes(q));
+
+  const prodHTML = list.map(p => {
+    const isOrig = String(p.id) === String(r.product_id);
+    const sel = st.product && String(st.product.id) === String(p.id);
+    return `
+      <div class="plan-prod ${sel ? 'sel' : ''}" onclick="pickProduct('${id}', ${p.id})">
+        <img src="${escapeHTML(p.image)}" alt="">
+        <div style="min-width:0">
+          <div class="pp-name">${escapeHTML(p.name)}</div>
+          <div class="pp-meta">₹${escapeHTML(String(p.price || ''))}${isOrig ? ' · ' : ''}${isOrig ? '<span class="pp-orig">ORIGINAL ITEM</span>' : ''}</div>
+        </div>
+      </div>`;
+  }).join('') || `<div class="ops-panel-row" style="padding:12px; color:var(--muted);">Koi product nahi mila.</div>`;
+
+  let varHTML = '';
+  if(st.product){
+    if(st.loadingVars){
+      varHTML = `<div class="plan-lbl">Size / Variant</div><div class="ops-panel-row" style="color:var(--muted);">Loading…</div>`;
+    }else if((st.variations || []).length){
+      varHTML = `<div class="plan-lbl">Size / Variant</div><div class="plan-vars">` +
+        st.variations.map(v => {
+          const sel = st.variation && String(st.variation.id) === String(v.id);
+          const wanted = r.desired_size && String(v.size).toLowerCase() === String(r.desired_size).toLowerCase();
+          return `<button class="plan-var ${sel ? 'sel' : ''} ${v.in_stock ? '' : 'oos'}" ${v.in_stock ? `onclick="pickVariation('${id}', ${v.id})"` : 'disabled'}>${escapeHTML(v.label || v.size || String(v.id))}${wanted ? ' ★' : ''}</button>`;
+        }).join('') + `</div>`;
+    }else{
+      varHTML = `<div class="plan-lbl">Size / Variant</div><div class="ops-panel-row" style="color:var(--muted);">Is product me koi variation nahi hai.</div>`;
+    }
+  }
+
+  const mode = st.payment_mode || 'prepaid';
+  const payHTML = `
+    <div class="plan-lbl">Payment</div>
+    <div class="plan-pay">
+      <button class="${mode === 'prepaid' ? 'sel' : ''}" onclick="setPay('${id}','prepaid',0)">Prepaid / Free</button>
+      <button class="${mode === 'cod' && Number(st.cod_amount) === 99 ? 'sel' : ''}" onclick="setPay('${id}','cod',99)">COD ₹99</button>
+      <button class="${mode === 'cod' && Number(st.cod_amount) !== 99 ? 'sel' : ''}" onclick="setPay('${id}','cod',-1)">COD custom</button>
+    </div>
+    ${mode === 'cod' ? `<input type="number" class="plan-input" style="margin-top:6px;" id="codAmt-${id}" placeholder="COD amount ₹" value="${Number(st.cod_amount) > 0 ? Number(st.cod_amount) : ''}" oninput="planState['${id}'].cod_amount = Number(this.value || 0)">` : ''}`;
+
+  const chosen = st.variation
+    ? `<div class="plan-saved"><b>${escapeHTML(st.product.name)}</b><div>${escapeHTML(st.variation.label || '')} · ₹${escapeHTML(String(st.variation.price || ''))}</div><div style="color:var(--muted); font-size:11.5px;">Shipment order no: ${escapeHTML(r.order_number)}EX</div></div>`
+    : '';
+
+  box.innerHTML = `
+    <div class="ops-panel-title">🎯 Plan Replacement</div>
+    <div class="plan-demand">
+      <div><b>Customer ne kya maanga:</b></div>
+      <div>Reason: ${escapeHTML(r.reason || '—')}${r.custom_reason ? ' — ' + escapeHTML(r.custom_reason) : ''}</div>
+      <div>Size: ${escapeHTML(r.desired_size || 'Not specified')} · Colour: ${escapeHTML(r.desired_color || 'Not specified')}</div>
+      <div>Original: ${escapeHTML(r.product_name || '')}</div>
+    </div>
+
+    <div class="plan-lbl">Product</div>
+    <input type="text" class="plan-input" placeholder="Search products…" value="${escapeHTML(st.search || '')}" oninput="planSearch('${id}', this.value)">
+    <div class="plan-products">${prodHTML}</div>
+
+    ${varHTML}
+    ${payHTML}
+
+    <div class="plan-lbl">Note (optional)</div>
+    <input type="text" class="plan-input" id="planNote-${id}" placeholder="Warehouse ke liye note" value="${escapeHTML(st.note || '')}" oninput="planState['${id}'].note = this.value">
+
+    ${chosen}
+    <button class="save-awb-btn" style="width:100%; margin-top:10px; background:var(--green); color:#fff; border-color:var(--green);" onclick="saveExchangePlan('${id}')">💾 Save Replacement Plan</button>`;
+}
+
+function planSearch(id, v){
+  planState[id].search = v;
+  renderPlanner(id);
+}
+
+async function pickProduct(id, productId){
+  const st = planState[id];
+  st.product = (st.products || []).find(p => String(p.id) === String(productId)) || null;
+  st.variation = null;
+  st.variations = [];
+  st.loadingVars = true;
+  renderPlanner(id);
+
+  try{
+    const res = await fetch(`${CONFIG.productVariationsUrl}?product_id=${encodeURIComponent(productId)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    st.variations = (data && data.variations) || [];
+
+    // Customer ne jo size maanga hai, wo available ho to apne aap select kar do
+    const r = requests.find(x => x.id === id);
+    if(r && r.desired_size){
+      const match = st.variations.find(v => v.in_stock && String(v.size).toLowerCase() === String(r.desired_size).toLowerCase());
+      if(match) st.variation = match;
+    }
+  }catch(err){
+    st.variations = [];
+  }finally{
+    st.loadingVars = false;
+    renderPlanner(id);
+  }
+}
+
+function pickVariation(id, variationId){
+  const st = planState[id];
+  st.variation = (st.variations || []).find(v => String(v.id) === String(variationId)) || null;
+  renderPlanner(id);
+}
+
+function setPay(id, mode, amount){
+  const st = planState[id];
+  st.payment_mode = mode;
+  if(mode === 'prepaid') st.cod_amount = 0;
+  else if(amount === 99) st.cod_amount = 99;
+  else if(Number(st.cod_amount) === 99 || !st.cod_amount) st.cod_amount = 0;
+  renderPlanner(id);
+}
+
+async function saveExchangePlan(id){
+  const st = planState[id];
+  const r = requests.find(x => x.id === id);
+  if(!st || !r) return;
+  if(!st.product){ toast('Pehle product chuno.'); return; }
+  if((st.variations || []).length && !st.variation){ toast('Size chuno.'); return; }
+  if(st.payment_mode === 'cod' && !(Number(st.cod_amount) > 0)){ toast('COD amount daalo.'); return; }
+
+  const payload = {
+    id,
+    product_id: String(st.product.id),
+    variation_id: st.variation ? String(st.variation.id) : '',
+    product_name: st.product.name,
+    size: st.variation ? (st.variation.size || '') : '',
+    color: st.variation ? (st.variation.color || '') : '',
+    price: st.variation ? Number(st.variation.price || 0) : Number(st.product.price || 0),
+    payment_mode: st.payment_mode || 'prepaid',
+    cod_amount: Number(st.cod_amount || 0),
+    note: st.note || ''
+  };
+
+  try{
+    const res = await fetch(CONFIG.saveExchangePlanUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(payload)
+    });
+    if(res.status === 401){ toast('Session expired — log in again.'); setTimeout(logout, 1200); return; }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    Object.assign(r, {
+      exchange_product_id: payload.product_id,
+      exchange_variation_id: payload.variation_id,
+      exchange_product_name: payload.product_name,
+      exchange_size: payload.size,
+      exchange_color: payload.color,
+      exchange_price: payload.price,
+      exchange_payment_mode: payload.payment_mode,
+      exchange_cod_amount: payload.cod_amount,
+      exchange_plan_note: payload.note,
+      exchange_plan_saved_at: new Date().toISOString()
+    });
+    renderList();
+    toast('Replacement plan saved ✓');
+  }catch(err){
+    toast("Plan save nahi hua. Dobara try karo.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   EX SHIPMENT — Shadowfax forward order (order no + EX) + printable slip
+   --------------------------------------------------------------------------- */
+async function generateExShipment(id){
+  const r = requests.find(x => x.id === id);
+  if(!r) return;
+  const pay = r.exchange_payment_mode === 'cod' ? `COD ₹${Number(r.exchange_cod_amount || 0).toFixed(0)}` : 'Prepaid (no charge)';
+  const item = [r.exchange_product_name, r.exchange_size ? 'Size ' + r.exchange_size : '', r.exchange_color || ''].filter(Boolean).join(' · ');
+  const ok = confirm(`Shadowfax par EX shipment banayein?\n\nOrder: ${r.order_number}EX\nItem: ${item}\nPayment: ${pay}\nTo: ${r.pickup_name || ''}, ${r.pickup_city || ''} ${r.pickup_pincode || ''}\n\nYe asli shipment banega.`);
+  if(!ok) return;
+
+  const btn = document.getElementById(`exGenBtn-${id}`);
+  if(btn){ btn.disabled = true; btn.textContent = 'Creating shipment…'; }
+
+  try{
+    const res = await fetch(CONFIG.generateExShipmentUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id })
+    });
+    if(res.status === 401){ toast('Session expired — log in again.'); setTimeout(logout, 1200); return; }
+    const data = await res.json();
+    if(!data.success || !data.awb){
+      toast(`Shipment nahi bana: ${data.message || 'unknown error'}`);
+      if(btn){ btn.disabled = false; btn.textContent = '🚚 Generate EX Shipment (Shadowfax)'; }
+      return;
+    }
+    r.exchange_delivery_awb = data.awb;
+    r.exchange_delivery_courier = data.courier || 'Shadowfax';
+    r.exchange_delivery_order_number = data.ex_order_number || (r.order_number + 'EX');
+    r.exchange_delivery_generated_at = new Date().toISOString();
+    renderStats();
+    renderList();
+    toast(data.already ? `Pehle se bana hua hai — AWB ${data.awb}` : `EX shipment ban gaya ✓ AWB ${data.awb}`);
+  }catch(err){
+    toast("Shipment nahi bana — connection check karke dobara try karo.");
+    if(btn){ btn.disabled = false; btn.textContent = '🚚 Generate EX Shipment (Shadowfax)'; }
+  }
+}
+
+function printExSlip(id){
+  const r = requests.find(x => x.id === id);
+  if(!r || !r.exchange_delivery_awb){ toast('Pehle EX shipment banao.'); return; }
+  const esc = escapeHTML;
+  const isCod = r.exchange_payment_mode === 'cod' && Number(r.exchange_cod_amount) > 0;
+  const addr = [r.pickup_address_line1, r.pickup_address_line2, r.pickup_city, r.pickup_state, r.pickup_pincode].filter(Boolean).map(esc).join(', ');
+  const exNo = esc(r.exchange_delivery_order_number || (r.order_number + 'EX'));
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Slip ${exNo}</title>
+<style>
+  *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif; margin:0; padding:16px; color:#111;}
+  .slip{max-width:420px; margin:0 auto; border:2px solid #111; border-radius:6px;}
+  .row{padding:10px 12px; border-bottom:1px solid #111;}
+  .row:last-child{border-bottom:none}
+  .brand{display:flex; justify-content:space-between; align-items:center; font-weight:800; letter-spacing:.08em;}
+  .lbl{font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:#555; margin-bottom:3px;}
+  .awb{font-size:18px; font-weight:800; letter-spacing:.08em; font-family:monospace; text-align:center;}
+  .bc{display:block; width:100%; height:auto; max-height:80px;}
+  .bc-wrap{text-align:center;}
+  .pay{font-size:20px; font-weight:800; text-align:center; padding:8px; border:2px solid #111; border-radius:4px; ${isCod ? 'background:#111; color:#fff;' : ''}}
+  .big{font-size:15px; font-weight:700;}
+  .two{display:flex; gap:10px} .two > div{flex:1}
+  @media print{ body{padding:0} .noprint{display:none} }
+</style></head><body>
+<div class="slip">
+  <div class="row brand"><span>SMARTICLAB</span><span style="font-size:11px;">EXCHANGE · Shadowfax</span></div>
+  <div class="row two">
+    <div><div class="lbl">Order</div><div class="big">#${exNo}</div></div>
+    <div><div class="lbl">Original</div><div class="big">#${esc(r.order_number)}</div></div>
+  </div>
+  <div class="row bc-wrap"><div class="lbl" style="text-align:left;">AWB</div>
+    <svg class="bc" id="bcAwb"></svg>
+    <div class="awb">${esc(r.exchange_delivery_awb)}</div>
+  </div>
+  <div class="row"><div class="pay">${isCod ? 'COD — COLLECT ₹' + Number(r.exchange_cod_amount).toFixed(0) : 'PREPAID — DO NOT COLLECT'}</div></div>
+  <div class="row"><div class="lbl">Ship To</div>
+    <div class="big">${esc(r.pickup_name || '')}</div>
+    <div style="font-size:13px; line-height:1.5;">${addr}</div>
+    <div style="font-size:13px; margin-top:3px;">📞 ${esc(r.pickup_phone || '')}</div>
+  </div>
+  <div class="row"><div class="lbl">Item</div>
+    <div class="big">${esc(r.exchange_product_name || '')}</div>
+    <div style="font-size:13px;">${r.exchange_size ? 'Size: <b>' + esc(r.exchange_size) + '</b>' : ''}${r.exchange_color ? ' · Colour: <b>' + esc(r.exchange_color) + '</b>' : ''} · Qty 1</div>
+    ${r.exchange_plan_note ? '<div style="font-size:12px; margin-top:4px;">Note: ' + esc(r.exchange_plan_note) + '</div>' : ''}
+  </div>
+  <div class="row bc-wrap"><svg class="bc" id="bcCoid" style="max-height:56px;"></svg>
+    <div style="font-family:monospace; font-size:14px; letter-spacing:.12em;">COID: ${exNo}</div>
+  </div>
+  <div class="row"><div class="lbl">From</div><div style="font-size:12px;">SmartICLab Warehouse, Mohan nagar, purani basti, Jaipur, Rajasthan 302001</div></div>
+</div>
+<div class="noprint" style="text-align:center; margin-top:14px;"><button onclick="window.print()" style="padding:10px 22px; font-size:15px;">🖨️ Print</button></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"><\/script>
+<script>
+  (function(){
+    function draw(){
+      try{
+        JsBarcode('#bcAwb', ${JSON.stringify(String(r.exchange_delivery_awb))}, { format:'CODE128', displayValue:false, height:70, width:2, margin:4 });
+        JsBarcode('#bcCoid', ${JSON.stringify(String(r.exchange_delivery_order_number || (r.order_number + 'EX')))}, { format:'CODE128', displayValue:false, height:46, width:2, margin:4 });
+      }catch(e){}
+      setTimeout(function(){ window.print(); }, 300);
+    }
+    // Barcode library load hone ka wait; na aaye (offline) to bina barcode print
+    var tries = 0;
+    (function wait(){ if(window.JsBarcode || tries++ > 20) draw(); else setTimeout(wait, 150); })();
+  })();
+<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ toast('Popup blocked — browser me popups allow karo.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+
+  // Record karo ki slip nikal gayi (Woo note + timestamp) — pehli baar hi
+  if(!r.delivery_slip_generated_at) generateSlip(id);
+}
+
+/* ---------------------------------------------------------------------------
+   QUALITY CHECK — item office pahunchne ke baad admin manually pass/fail karta hai
+   --------------------------------------------------------------------------- */
+async function markQC(id, qc_status){
+  const noteBox = document.getElementById(`qcNote-${id}`);
+  const qc_note = noteBox ? noteBox.value.trim() : '';
+
+  try{
+    const res = await fetch(CONFIG.markQcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, qc_status, qc_note })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    const r = requests.find(x => x.id === id);
+    if(r){
+      r.qc_status = qc_status;
+      r.qc_checked_at = new Date().toISOString();
+      r.qc_note = qc_note;
+    }
+    renderList();
+    toast(qc_status === 'passed' ? 'QC marked Passed ✓' : 'QC marked Failed');
+  }catch(err){
+    toast("Couldn't save QC status — please try again.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   EXCHANGE DELIVERY — replacement item ka naya order/AWB record karna
+   --------------------------------------------------------------------------- */
+async function recordExchangeDelivery(id){
+  const order_number = document.getElementById(`exOrderNo-${id}`).value.trim();
+  const awb = document.getElementById(`exAwb-${id}`).value.trim();
+  const courier = document.getElementById(`exCourier-${id}`).value.trim() || 'Shadowfax';
+
+  if(!order_number || !awb){
+    toast('Order number aur AWB dono zaroori hai.');
+    return;
+  }
+
+  try{
+    const res = await fetch(CONFIG.recordExchangeDeliveryUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, order_number, awb, courier })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    const r = requests.find(x => x.id === id);
+    if(r){
+      r.exchange_delivery_order_number = order_number;
+      r.exchange_delivery_awb = awb;
+      r.exchange_delivery_courier = courier;
+      r.exchange_delivery_generated_at = new Date().toISOString();
+    }
+    renderList();
+    toast('Exchange delivery recorded ✓ — customer will now see live tracking');
+  }catch(err){
+    toast("Couldn't save — please try again.");
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   ORDER LOG — poori journey ka timeline
+   --------------------------------------------------------------------------- */
+async function viewLog(id, orderNo){
+  document.getElementById('logModalOverlay').classList.add('show');
+  document.getElementById('logModalOrderNo').textContent = `Order #${orderNo}`;
+  document.getElementById('logModalBody').innerHTML = `<div class="loading"><div class="spinner"></div>Loading log...</div>`;
+
+  try{
+    const res = await fetch(`${CONFIG.getLogUrl}?id=${encodeURIComponent(id)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    const events = Array.isArray(data) ? data : [];
+    if(events.length === 0){
+      document.getElementById('logModalBody').innerHTML = `<div class="empty">Koi log entry nahi hai.</div>`;
+      return;
+    }
+    document.getElementById('logModalBody').innerHTML = events.map(ev => `
+      <div class="log-item">
+        <div class="log-item-title">${escapeHTML((ev.event_type || '').replace(/_/g, ' '))}</div>
+        ${ev.event_note ? `<div class="log-item-note">${escapeHTML(ev.event_note)}</div>` : ''}
+        <div class="log-item-time">${formatDate(ev.created_at) || ''}</div>
+      </div>
+    `).join('');
+  }catch(err){
+    document.getElementById('logModalBody').innerHTML = `<div class="empty">Log load nahi ho paya. Dobara try karo.</div>`;
+  }
+}
+
+function closeLog(){
+  document.getElementById('logModalOverlay').classList.remove('show');
+}
+
+function renderList(){
+  if(currentFilter === 'extended'){ renderExtendedList(); return; }
+  if(currentFilter === 'deleted'){ renderDeletedList(); return; }
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  let items = requests.filter(r => {
+    if(currentType !== 'all' && r.type !== currentType) return false;
+    if(currentFilter === 'all') return true;
+    if(currentFilter === 'awb_pending') return r.status === 'approved' && !r.awb_number;
+    if(currentFilter === 'qc_pending') return r.status === 'approved' && !!r.awb_number && !r.qc_status;
+    return r.status === currentFilter;
+  });
+  if(q){
+    items = items.filter(r =>
+      (r.order_number + '').toLowerCase().includes(q) ||
+      (r.identifier || '').toLowerCase().includes(q) ||
+      (r.product_name || '').toLowerCase().includes(q) ||
+      (r.pickup_name || '').toLowerCase().includes(q)
+    );
+  }
+
+  const listEl = document.getElementById('list');
+  if(!items.length){
+    listEl.innerHTML = `<div class="empty">No requests found${q ? ' for "' + escapeHTML(q) + '"' : ''}.</div>`;
+    return;
+  }
+
+  // Batch grouping — jin requests ka batch_id same hai, unhe ek saath ek group mein dikhao
+  const seenBatches = new Set();
+  const groups = [];
+  items.forEach(r => {
+    if(r.batch_id){
+      if(seenBatches.has(r.batch_id)) return;
+      seenBatches.add(r.batch_id);
+      groups.push({ batch_id: r.batch_id, members: items.filter(x => x.batch_id === r.batch_id) });
+    }else{
+      groups.push({ batch_id: null, members: [r] });
+    }
+  });
+
+  listEl.innerHTML = groups.map(g => g.batch_id ? batchGroupHTML(g) : cardHTML(g.members[0])).join('');
+}
+
+function batchGroupHTML(g){
+  const members = g.members;
+  const allPending = members.every(r => r.status === 'pending');
+  const allApproved = members.every(r => r.status === 'approved');
+  const withAwb = members.find(r => r.awb_number);
+
+  let batchActionsHTML = '';
+  if(allPending){
+    batchActionsHTML = `<button class="save-awb-btn" style="width:100%" onclick="approveBatch('${g.batch_id}')">✓ Approve All ${members.length} Items</button>`;
+  }else if(allApproved && !withAwb){
+    batchActionsHTML = `<button class="save-awb-btn" style="width:100%" onclick="generateBatchPickup('${g.batch_id}')">📦 Generate Combined Pickup — ${members.length} items, 1 truck visit</button>`;
+  }else if(withAwb){
+    batchActionsHTML = `
+      <div class="pickup-generated-box">
+        <div class="pickup-generated-lbl">✅ Combined Pickup Generated (${members.length} items together)</div>
+        <div class="awb-tag">📦 AWB: ${escapeHTML(withAwb.awb_number)}${withAwb.awb_courier ? ' · ' + escapeHTML(withAwb.awb_courier) : ''}</div>
+        <button class="save-awb-btn" style="margin-top:8px" onclick="trackPickup('${escapeHTML(withAwb.awb_number)}')">📍 Track Pickup</button>
+      </div>`;
+  }
+
+  return `
+    <div class="batch-group">
+      <div class="batch-group-header">📦 Batch — ${members.length} items together · Order #${escapeHTML(members[0].order_number)}</div>
+      ${members.map(cardHTML).join('')}
+      <div class="batch-group-actions">${batchActionsHTML}</div>
+    </div>`;
+}
+
+function cardHTML(r){
+  const address = [r.pickup_address_line1, r.pickup_address_line2].filter(Boolean).join(', ');
+  const cityLine = [r.pickup_city, r.pickup_state, r.pickup_pincode].filter(Boolean).join(', ');
+
+  const pickupPanelHTML = `
+    <div class="pickup-panel">
+      <div class="pickup-panel-title">📦 Reverse Pickup</div>
+      <div class="pickup-panel-row"><b>${escapeHTML(r.pickup_name || '—')}</b>${r.pickup_phone ? ' · ' + escapeHTML(r.pickup_phone) : ''}</div>
+      <div class="pickup-panel-row">${escapeHTML(address || '—')}${cityLine ? ', ' + escapeHTML(cityLine) : ''}</div>
+      <div class="pickup-panel-row"><b>Item:</b> ${escapeHTML(r.product_name)}${r.quantity > 1 ? ' · Qty ' + r.quantity : ''}</div>
+    </div>`;
+
+  let actionsHTML = '';
+
+  if(r.status === 'pending'){
+    actionsHTML = `
+      ${pickupPanelHTML}
+      <textarea class="admin-note-box" id="note-${r.id}" placeholder="Reason (optional) — e.g. wrong product returned"></textarea>
+      <div class="awb-optional-lbl">AWB / Tracking (optional — only applied if you Approve)</div>
+      <div class="awb-row">
+        <input type="text" id="awb-${r.id}" placeholder="AWB number">
+        <input type="text" id="courier-${r.id}" placeholder="Courier (e.g. Shadowfax)">
+      </div>
+      <div class="req-actions">
+        <button class="act-btn approve" onclick="decide('${r.id}', 'approve')">✓ Approve</button>
+        <button class="act-btn disapprove" onclick="decide('${r.id}', 'disapprove')">✕ Disapprove</button>
+      </div>`;
+  }else if(r.status === 'approved' && !r.awb_number){
+    // Approved ho chuka hai lekin abhi tak koi AWB nahi — ab pickup MANUALLY generate hoga,
+    // aur admin khud choose karega Shadowfax ya One Delivery (Delhivery) mein se kaunsa courier use karna hai.
+    actionsHTML = `
+      <div class="decided-note">Approved${r.admin_note ? ` — <b>Reason:</b> ${escapeHTML(r.admin_note)}` : ''}</div>
+      ${pickupPanelHTML}
+      <div class="awb-pending-box">
+        <div class="awb-pending-lbl">📦 Reverse pickup abhi generate nahi hua</div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <input type="text" id="pincode-${r.id}" value="${escapeHTML(r.pickup_pincode || '')}" placeholder="Pincode" style="flex:1; min-width:0; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px;">
+          <button class="extend-fetch-btn" style="flex-shrink:0;" onclick="checkServiceability('${r.id}')">Check Serviceability</button>
+        </div>
+        <div id="serviceabilityResult-${r.id}" style="font-size:11.5px; color:var(--muted); margin-bottom:8px;"></div>
+        <div style="display:flex; gap:8px;">
+          <button class="save-awb-btn" style="flex:1; min-width:0;" onclick="generatePickup('${r.id}','shadowfax')">📦 Generate via Shadowfax</button>
+        </div>
+        <div class="awb-optional-lbl" style="margin-top:10px;">One Delivery (Delhivery) — pickup unke portal pe khud banao, phir AWB yahan record karo</div>
+        <div class="awb-row" style="margin-top:6px">
+          <input type="text" id="awb-${r.id}" placeholder="AWB number">
+          <input type="text" id="courier-${r.id}" placeholder="Courier" value="One Delivery">
+        </div>
+        <button class="save-awb-btn" onclick="saveAwb('${r.id}')" style="margin-top:6px">Save AWB Manually</button>
+      </div>
+      ${editToggleHTML(r)}`;
+  }else{
+    // Approved with AWB, ya disapproved — dono "decided" states, ab edit-able bhi hain.
+    const typeLabel = r.type || 'Return';
+    const awbTagHTML = (r.status === 'approved' && r.awb_number)
+      ? `
+        <div class="pickup-generated-box">
+          <div class="pickup-generated-lbl">✅ ${escapeHTML(typeLabel)} Pickup Generated${r.awb_updated_at ? ' — ' + formatDate(r.awb_updated_at) : ''}</div>
+          <div class="awb-tag">📦 AWB: ${escapeHTML(r.awb_number)}${r.awb_courier ? ' · ' + escapeHTML(r.awb_courier) : ''}</div>
+          <button class="save-awb-btn" style="margin-top:8px" onclick="trackPickup('${escapeHTML(r.awb_number)}')">📍 Track Pickup</button>
+        </div>`
+      : '';
+
+    // QC — item office pahunchne ke baad admin manually verify karta hai (Return aur Exchange dono ke liye)
+    let qcOpsHTML = '';
+    if(r.status === 'approved' && r.awb_number){
+      if(r.qc_status === 'passed'){
+        qcOpsHTML = `
+          <div class="ops-panel">
+            <div class="ops-panel-title">🔍 Quality Check</div>
+            <div class="ops-done-lbl">✅ QC Passed${r.qc_checked_at ? ' — ' + formatDate(r.qc_checked_at) : ''}</div>
+            ${r.qc_note ? `<div class="ops-panel-row">${escapeHTML(r.qc_note)}</div>` : ''}
+          </div>`;
+      }else if(r.qc_status === 'failed'){
+        qcOpsHTML = `
+          <div class="ops-panel">
+            <div class="ops-panel-title">🔍 Quality Check</div>
+            <div class="ops-done-lbl" style="color:#9E2B2B;">❌ QC Failed${r.qc_checked_at ? ' — ' + formatDate(r.qc_checked_at) : ''}</div>
+            ${r.qc_note ? `<div class="ops-panel-row">${escapeHTML(r.qc_note)}</div>` : ''}
+          </div>`;
+      }else{
+        qcOpsHTML = `
+          <div class="ops-panel">
+            <div class="ops-panel-title">🔍 Quality Check</div>
+            <div class="ops-panel-row" style="color:var(--muted); margin-bottom:8px;">Parcel office pahunchte hi yahan se QC mark karo.</div>
+            <input type="text" id="qcNote-${r.id}" placeholder="Note (optional)" style="width:100%; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px; margin-bottom:8px;">
+            <div style="display:flex; gap:8px;">
+              <button class="save-awb-btn" style="flex:1; min-width:0; background:var(--green); color:#fff; border-color:var(--green);" onclick="markQC('${r.id}','passed')">✓ QC Passed</button>
+              <button class="save-awb-btn" style="flex:1; min-width:0; background:var(--danger); color:#fff; border-color:var(--danger);" onclick="markQC('${r.id}','failed')">✕ QC Failed</button>
+            </div>
+          </div>`;
+      }
+    }
+
+    // EXCHANGE: customer ki desired size/colour + delivery slip + replacement shipment
+    let exchangeOpsHTML = '';
+    if(r.status === 'approved' && r.type === 'Exchange'){
+      let deliveryBlockHTML = '';
+      if(r.exchange_delivery_awb){
+        deliveryBlockHTML = `
+          <div class="ops-done-lbl" style="margin-top:8px;">✅ Replacement Shipped — Order ${escapeHTML(r.exchange_delivery_order_number || '')}</div>
+          <div class="ops-panel-row">📦 AWB: ${escapeHTML(r.exchange_delivery_awb)}${r.exchange_delivery_courier ? ' · ' + escapeHTML(r.exchange_delivery_courier) : ''}</div>
+          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+            <button class="save-awb-btn" style="flex:1; min-width:140px; background:var(--navy); color:#fff; border-color:var(--navy);" onclick="printExSlip('${r.id}')">🖨️ Print Delivery Slip</button>
+            <button class="save-awb-btn" style="flex:1; min-width:140px;" onclick="trackPickup('${escapeHTML(r.exchange_delivery_awb)}')">📍 Track Replacement</button>
+          </div>`;
+      }else if(r.qc_status === 'passed'){
+        deliveryBlockHTML = `
+          ${exchangePlannerHTML(r)}
+          <details style="margin-top:10px;">
+            <summary style="cursor:pointer; font-size:12px; color:var(--muted); font-weight:600;">Shipment kahin aur se banaya? Manually AWB record karo</summary>
+          <div style="margin-top:8px;">
+            <div class="ops-panel-row" style="margin-bottom:6px;"><b>Record Replacement Shipment</b></div>
+            <input type="text" id="exOrderNo-${r.id}" placeholder="Delivery order number (e.g. ${escapeHTML(r.order_number)}EX)" style="width:100%; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px; margin-bottom:6px;">
+            <input type="text" id="exAwb-${r.id}" placeholder="AWB number" style="width:100%; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px; margin-bottom:6px;">
+            <input type="text" id="exCourier-${r.id}" placeholder="Courier (default: Shadowfax)" style="width:100%; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px; margin-bottom:6px;">
+            <button class="save-awb-btn" style="width:100%;" onclick="recordExchangeDelivery('${r.id}')">📦 Record Exchange Delivery</button>
+          </div>
+          </details>`;
+      }else{
+        deliveryBlockHTML = `<div class="ops-panel-row" style="color:var(--muted); margin-top:6px;">QC pass hone ke baad replacement shipment record kar sakte ho.</div>`;
+      }
+
+      exchangeOpsHTML = `
+        <div class="ops-panel">
+          <div class="ops-panel-title">🔁 Exchange — Replacement Details</div>
+          <div class="ops-panel-row"><b>Desired Size:</b> ${escapeHTML(r.desired_size || 'Not specified')}</div>
+          <div class="ops-panel-row"><b>Desired Colour:</b> ${escapeHTML(r.desired_color || 'Not specified')}</div>
+          ${r.delivery_slip_generated_at
+            ? `<div class="ops-done-lbl">✅ Delivery slip printed — ${formatDate(r.delivery_slip_generated_at)}</div>`
+            : (r.exchange_delivery_awb ? '' : `<div class="ops-panel-row" style="color:var(--muted); margin-top:6px;">📄 Delivery slip EX shipment banne ke baad milegi.</div>`)}
+          ${deliveryBlockHTML}
+        </div>`;
+    }
+
+    // RETURN: customer ke bank details + refund transaction
+    let refundOpsHTML = '';
+    if(r.status === 'approved' && r.type === 'Return'){
+      if(r.refund_completed_at){
+        const methodLabel = {upi:'UPI', bank_transfer:'Bank Transfer', original_payment_method:'Original Payment Method'}[r.refund_method] || r.refund_method || '—';
+        refundOpsHTML = `
+          <div class="ops-panel">
+            <div class="ops-panel-title">💰 Refund</div>
+            <div class="ops-done-lbl">✅ Refund Successful — Txn: ${escapeHTML(r.refund_transaction_id)}</div>
+            <div class="ops-panel-row">Method: ${escapeHTML(methodLabel)}</div>
+            ${r.refund_screenshot_url ? `<div class="ops-panel-row"><a href="${escapeHTML(r.refund_screenshot_url)}" target="_blank">📎 View proof screenshot</a></div>` : ''}
+            <div class="ops-panel-row" style="color:var(--muted); font-size:11.5px;">${formatDate(r.refund_completed_at)}</div>
+          </div>`;
+      }else if(r.bank_details_submitted_at){
+        const bankDetailsHTML = r.bank_details_method === 'upi'
+          ? `<div class="ops-panel-row">UPI: ${escapeHTML(r.upi_id)}</div>`
+          : `<div class="ops-panel-row"><b>${escapeHTML(r.bank_account_name)}</b></div><div class="ops-panel-row">A/C: ${escapeHTML(r.bank_account_number)} · IFSC: ${escapeHTML(r.bank_ifsc)}</div>`;
+        refundOpsHTML = `
+          <div class="ops-panel">
+            <div class="ops-panel-title">💰 Refund — Bank Details Received</div>
+            ${bankDetailsHTML}
+            <select id="refundMethod-${r.id}" style="margin-top:8px; width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:13px;">
+              <option value="upi" ${r.bank_details_method === 'upi' ? 'selected' : ''}>UPI</option>
+              <option value="bank_transfer" ${r.bank_details_method === 'bank' ? 'selected' : ''}>Bank Transfer</option>
+              <option value="original_payment_method">Original Payment Method</option>
+            </select>
+            <input type="text" id="txn-${r.id}" placeholder="Refund transaction ID" style="margin-top:8px; width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:13px;">
+            <input type="text" id="refundProof-${r.id}" placeholder="Proof screenshot URL (optional)" style="margin-top:8px; width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:13px;">
+            <button class="save-awb-btn" style="margin-top:8px" onclick="markRefundComplete('${r.id}')">✓ Mark Refund Complete</button>
+          </div>`;
+      }else{
+        refundOpsHTML = `
+          <div class="ops-panel">
+            <div class="ops-panel-title">💰 Refund</div>
+            <div class="ops-panel-row" style="color:var(--muted);">Waiting for customer to submit bank details.</div>
+          </div>`;
+      }
+    }
+
+    actionsHTML = `<div class="decided-note">Marked ${r.status}${r.admin_note ? `<br><b>Reason:</b> ${escapeHTML(r.admin_note)}` : ''}</div>${r.status === 'approved' ? pickupPanelHTML : ''}${awbTagHTML}${qcOpsHTML}${exchangeOpsHTML}${refundOpsHTML}<button class="extend-fetch-btn" style="margin-top:10px; width:100%;" onclick="viewLog('${r.id}','${escapeHTML(r.order_number)}')">📜 View Full Log</button>${editToggleHTML(r)}`;
+  }
+
+  return `
+    <div class="req-card" id="req-${r.id}">
+      <div class="req-top">
+        <div>
+          <div class="req-order">Order #${escapeHTML(r.order_number)}</div>
+          <div class="req-date">${formatDate(r.requested_at)}</div>
+        </div>
+        <span class="badge ${r.status}">${r.status}</span>
+      </div>
+
+      <div>
+        <span class="type-tag ${r.type.toLowerCase()}">${r.type}</span>
+      </div>
+      <div class="req-product" style="margin-top:6px">${escapeHTML(r.product_name)}${r.quantity > 1 ? ' · Qty ' + r.quantity : ''}</div>
+      <div class="req-meta">
+        <b>Reason:</b> ${escapeHTML(r.reason)}${r.custom_reason ? ' — ' + escapeHTML(r.custom_reason) : ''}<br>
+        <b>Contact:</b> ${escapeHTML(r.identifier)}${r.delivered_date ? ' · Delivered ' + formatDate(r.delivered_date) : ''}
+      </div>
+
+      ${actionsHTML}
+
+      <div id="edit-box-${r.id}" style="display:none; margin-top:10px;">
+        <textarea class="admin-note-box" id="note-${r.id}-edit" placeholder="Update reason / note">${escapeHTML(r.admin_note || '')}</textarea>
+        <div class="req-actions">
+          <button class="act-btn approve" onclick="decide('${r.id}', 'approve', true)">✓ Approve</button>
+          <button class="act-btn disapprove" onclick="decide('${r.id}', 'disapprove', true)">✕ Disapprove</button>
+        </div>
+      </div>
+
+      <button class="delete-req-btn" onclick="deleteRequest('${r.id}')">🗑 Delete</button>
+    </div>`;
+}
+
+function editToggleHTML(r){
+  return `<button class="extend-fetch-btn" style="margin-top:10px; width:100%;" onclick="toggleEdit('${r.id}')">✏️ Edit</button>`;
+}
+
+function toggleEdit(id){
+  const box = document.getElementById(`edit-box-${id}`);
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+/* ---------------------------------------------------------------------------
+   TRACK PICKUP
+   --------------------------------------------------------------------------- */
+async function trackPickup(awb){
+  document.getElementById('trackModalOverlay').classList.add('show');
+  document.getElementById('trackModalAwb').textContent = `AWB: ${awb}`;
+  document.getElementById('trackModalBody').innerHTML = `<div class="loading"><div class="spinner"></div>Loading tracking...</div>`;
+
+  try{
+    const res = await fetch(`${CONFIG.trackPickupUrl}?awb=${encodeURIComponent(awb)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success){
+      document.getElementById('trackModalBody').innerHTML = `<div class="empty">Tracking abhi available nahi hai.</div>`;
+      return;
+    }
+
+    const timelineHTML = (data.timeline || []).length
+      ? data.timeline.map(t => `
+          <div class="track-item">
+            <div class="track-item-title">${escapeHTML(t.title)}</div>
+            <div class="track-item-time">${[formatDate(t.time) || t.time || '', t.location].filter(Boolean).map(escapeHTML).join(' · ')}</div>
+          </div>`).join('')
+      : `<div class="empty">Abhi koi tracking update nahi hai.</div>`;
+
+    const qcRows = (data.qc || []).filter(q => q.picked || q.qc_status);
+    const qcHTML = qcRows.length
+      ? `<div class="track-qc">
+          <div class="track-qc-title">📸 Pickup QC Verification</div>
+          ${qcRows.map(q => {
+            let line = '';
+            if(q.qc_status === 'passed') line = `<span class="qc-pass">✓ Product matched — QC passed</span>`;
+            else if(q.qc_status === 'fail' || q.qc_status === 'fail_hub') line = `<span class="qc-fail">✕ QC failed${q.qc_remarks ? ': ' + escapeHTML(q.qc_remarks) : ''}</span>`;
+            else line = `<span class="qc-pending">QC pending at pickup</span>`;
+            const photosHTML = (q.qc_images || []).length
+              ? `<div class="track-photos">${q.qc_images.map(p => `<a href="${p}" target="_blank"><img src="${p}" alt="QC photo"></a>`).join('')}</div>`
+              : '';
+            return `<div class="track-qc-row">${escapeHTML(q.name || '')}${q.name ? ': ' : ''}${line}${photosHTML}</div>`;
+          }).join('')}
+        </div>`
+      : '';
+
+    document.getElementById('trackModalBody').innerHTML = `
+      <div class="track-status">${escapeHTML(data.status || 'Status unavailable')}</div>
+      ${timelineHTML}
+      ${qcHTML}
+    `;
+  }catch(err){
+    document.getElementById('trackModalBody').innerHTML = `<div class="empty">Tracking load nahi ho payi. Dobara try karo.</div>`;
+  }
+}
+
+function closeTrackModal(){
+  document.getElementById('trackModalOverlay').classList.remove('show');
+}
+
+async function decide(id, action, isEdit){
+  const card = document.getElementById(`req-${id}`);
+  const buttons = card.querySelectorAll('.act-btn');
+  buttons.forEach(b => b.disabled = true);
+
+  const noteBox = document.getElementById(isEdit ? `note-${id}-edit` : `note-${id}`);
+  const note = noteBox ? noteBox.value.trim() : '';
+
+  const awbBox = document.getElementById(`awb-${id}`);
+  const courierBox = document.getElementById(`courier-${id}`);
+  const awb_number = (action === 'approve' && awbBox) ? awbBox.value.trim() : '';
+  const awb_courier = (action === 'approve' && courierBox) ? courierBox.value.trim() : '';
+
+  try{
+    const res = await fetch(CONFIG.updateUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, action, note, awb_number, awb_courier })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    const r = requests.find(x => x.id === id);
+    if(r){
+      r.status = action === 'approve' ? 'approved' : 'disapproved';
+      r.admin_note = note;
+      // Shadowfax se auto-generated AWB priority; admin ne manually likha ho toh wo fallback.
+      if(action === 'approve' && data.awb_number){ r.awb_number = data.awb_number; r.awb_courier = data.awb_courier || 'Shadowfax'; r.awb_updated_at = new Date().toISOString(); }
+      else if(action === 'approve' && awb_number){ r.awb_number = awb_number; r.awb_courier = awb_courier; r.awb_updated_at = new Date().toISOString(); }
+    }
+    renderStats();
+    renderList();
+    if(action === 'approve' && data.pickup_status === 'created'){
+      toast(`Approved ✓ — Shadowfax pickup created (AWB: ${data.awb_number})`);
+    }else if(action === 'approve' && data.pickup_status === 'failed'){
+      toast('Approved — but Shadowfax pickup failed, add AWB manually.');
+    }else{
+      toast(action === 'approve' ? 'Request approved ✓' : 'Request disapproved');
+    }
+  }catch(err){
+    toast("Couldn't update — please try again.");
+    buttons.forEach(b => b.disabled = false);
+  }
+}
+
+async function saveAwb(id){
+  const btn = document.querySelector(`#req-${id} .save-awb-btn`);
+  const awbBox = document.getElementById(`awb-${id}`);
+  const courierBox = document.getElementById(`courier-${id}`);
+  const awb_number = awbBox ? awbBox.value.trim() : '';
+  const awb_courier = courierBox ? courierBox.value.trim() : '';
+
+  if(!awb_number){
+    toast('Enter an AWB number first.');
+    return;
+  }
+
+  if(btn) btn.disabled = true;
+
+  try{
+    const res = await fetch(CONFIG.updateUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, action: 'update_awb', awb_number, awb_courier })
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    const r = requests.find(x => x.id === id);
+    if(r){ r.awb_number = awb_number; r.awb_courier = awb_courier; }
+    renderStats();
+    renderList();
+    toast('AWB saved ✓');
+  }catch(err){
+    toast("Couldn't save AWB — please try again.");
+    if(btn) btn.disabled = false;
+  }
+}
+
+function escapeHTML(str){
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+function formatDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d)) return '';
+  return d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+}
+
+/* ---------------------------------------------------------------------------
+   EXTEND WINDOW (return/exchange date override)
+   --------------------------------------------------------------------------- */
+function toDateInputValue(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d)) return '';
+  return d.toISOString().slice(0,10); // yyyy-mm-dd
+}
+
+function openExtendWindow(){
+  document.getElementById('extendModalOverlay').classList.add('show');
+  document.getElementById('extendOrderNo').value = '';
+  document.getElementById('extendOrderInfo').classList.remove('show');
+  document.getElementById('extendOrderInfo').innerHTML = '';
+  document.getElementById('extendFieldsWrap').style.display = 'none';
+  document.getElementById('extendNote').value = '';
+  document.getElementById('extendSaveBtn').disabled = true;
+  hideExtendError();
+}
+
+function closeExtendWindow(){
+  document.getElementById('extendModalOverlay').classList.remove('show');
+}
+
+function showExtendError(msg){
+  const box = document.getElementById('extendError');
+  box.textContent = msg;
+  box.classList.add('show');
+}
+function hideExtendError(){
+  document.getElementById('extendError').classList.remove('show');
+}
+
+async function fetchOrderWindow(){
+  const orderNo = document.getElementById('extendOrderNo').value.trim();
+  hideExtendError();
+  if(!orderNo){
+    showExtendError('Order number daalo.');
+    return;
+  }
+
+  const btn = document.getElementById('extendFetchBtn');
+  btn.disabled = true;
+  btn.textContent = 'Fetching...';
+
+  try{
+    const res = await fetch(`${CONFIG.windowLookupUrl}?order_no=${encodeURIComponent(orderNo)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(res.status === 401){
+      showExtendError('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success){
+      showExtendError(data.message || 'Order not found. Check the order number.');
+      document.getElementById('extendFieldsWrap').style.display = 'none';
+      document.getElementById('extendSaveBtn').disabled = true;
+      return;
+    }
+
+    const info = document.getElementById('extendOrderInfo');
+    info.innerHTML = `
+      <b>${escapeHTML(data.customer_name || 'Customer')}</b> · ${escapeHTML(data.customer_phone || '')}<br>
+      Delivered: ${data.delivered_date ? formatDate(data.delivered_date) : 'Not delivered yet'}<br>
+      ${data.has_override ? '<b style="color:#0A7A42">Custom window already set for this order.</b>' : 'Currently on default 7-day policy window.'}
+    `;
+    info.classList.add('show');
+
+    document.getElementById('extendReturnDate').value = toDateInputValue(data.return_until);
+    document.getElementById('extendExchangeDate').value = toDateInputValue(data.exchange_until);
+    document.getElementById('extendFieldsWrap').style.display = 'block';
+    document.getElementById('extendSaveBtn').disabled = false;
+    document.getElementById('extendOrderNo').dataset.confirmedOrder = orderNo;
+  }catch(err){
+    showExtendError("Couldn't fetch order. Please try again.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Fetch';
+  }
+}
+
+function quickExtend(days){
+  const target = new Date();
+  target.setDate(target.getDate() + days);
+  const value = target.toISOString().slice(0,10);
+  document.getElementById('extendReturnDate').value = value;
+  document.getElementById('extendExchangeDate').value = value;
+}
+
+async function saveOrderWindow(){
+  hideExtendError();
+  const orderNo = document.getElementById('extendOrderNo').dataset.confirmedOrder || document.getElementById('extendOrderNo').value.trim();
+  const returnDate = document.getElementById('extendReturnDate').value;
+  const exchangeDate = document.getElementById('extendExchangeDate').value;
+  const note = document.getElementById('extendNote').value.trim();
+
+  if(!returnDate || !exchangeDate){
+    showExtendError('Dono dates select karo.');
+    return;
+  }
+
+  const btn = document.getElementById('extendSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try{
+    // End of day (23:59:59) taaki customer us pure din tak eligible rahe
+    const return_until = new Date(returnDate + 'T23:59:59').toISOString();
+    const exchange_until = new Date(exchangeDate + 'T23:59:59').toISOString();
+
+    const res = await fetch(CONFIG.windowExtendUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ order_number: orderNo, return_until, exchange_until, note })
+    });
+    if(res.status === 401){
+      showExtendError('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    if(!data.success) throw new Error('failed');
+
+    toast(`Window updated for Order #${orderNo} ✓`);
+    closeExtendWindow();
+    if(currentFilter === 'extended') loadExtendedWindows();
+  }catch(err){
+    showExtendError("Couldn't save — please try again.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   BOOT — refresh par dobara login na karna pade
+   --------------------------------------------------------------------------- */
+try{ syncNav(); }catch(e){}
+
+(function restoreAdminSession(){
+  const saved = readAdminSession();
+  if(!saved) return;
+  token = saved;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('requestsScreen').style.display = 'block'; document.body.classList.add('authed');
+  loadRequests();
+})();
+</script>
+</body>
+</html>

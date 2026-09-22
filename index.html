@@ -1,0 +1,2961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Track / Return / Exchange — Smarticlab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!--
+  ============================================================================
+  SMARTICLAB — ORDER LOOKUP + RETURN & EXCHANGE PAGE (v2, no OTP)
+  ============================================================================
+  Flow:
+    1) Customer enters Order No + ek hi field me Phone ya Email (jo bhi
+       type kare, wahi detect ho jata hai — number type kare to sirf
+       digits allow hote hain, letters/@ type kare to email maana jata hai).
+    2) Dono submit hote hain n8n ko. n8n WooCommerce me us order ko dhoondta
+       hai aur billing.phone / billing.email se match karta hai.
+       - Order hi nahi mila -> "Order not found" error
+       - Order mila par phone/email match nahi hua -> "Please check your
+         Order No and Phone/Email" error
+       - Dono match -> order detail page khulta hai
+    3) Order me jitne bhi products (line items) hain, HAR product ka apna
+       alag Return / Exchange button hai (delivery ke 7 din tak) — taaki
+       agar order me 2-3 alag product ho to sirf jisko return/exchange
+       karna hai wahi select ho, sabka nahi.
+    4) Reason: Size Issue / Colour Issue / Other (Other pe custom text box).
+       Submit hote hi request Telegram par chali jaati hai approval ke liye.
+
+  BACKEND — 2 n8n workflows chahiye (files saath me hain):
+    n8n-1-lookup-order-workflow.json  -> CONFIG.lookupOrderUrl
+        POST { order_no, identifier, type: 'phone' | 'email' }
+        WooCommerce se order dhoondta hai, billing phone/email match karta
+        hai, match hone par product photo/price bhi jod kar order return
+        karta hai. "delivered_date" order meta se aata hai (jab courier
+        "Delivered" ho tab ye meta save karna hoga).
+    n8n-3-submit-request-workflow.json -> CONFIG.submitRequestUrl
+        (pehle jaisa hi hai — koi change nahi) Request ko Telegram bot
+        ko bhejta hai approval ke liye.
+
+    NOTE: pehle wala n8n-1-otp-workflow.json aur n8n-2-get-orders-workflow.json
+    ab is version me use nahi ho rahe — WhatsApp OTP abhi ke liye hata diya
+    gaya hai, jab chaho baad me wapas jod sakte ho.
+
+  DEMO MODE: CONFIG.demoMode = true hai. Test karne ke liye:
+    Order No: 10482   |   Phone: 9876543210   (ya Email: demo@smarticlab.in)
+  ============================================================================
+-->
+
+<style>
+  :root{
+    --navy:#0F1726;
+    --navy-soft:#1C2740;
+    --green:#0EA55A;
+    --green-bg:#C9F5DC;
+    --green-bg-soft:#E7FBF0;
+    --bg:#F6F7F9;
+    --card:#FFFFFF;
+    --border:#E7E9EE;
+    --text:#12141B;
+    --muted:#6B7280;
+    --danger:#D64545;
+    --danger-bg:#FDEEEE;
+    --radius-lg:22px;
+    --radius-md:16px;
+    --radius-sm:12px;
+    --shadow:0 2px 10px rgba(15,23,38,0.05);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Poppins',system-ui,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{max-width:480px; margin:0 auto; min-height:100vh; background:var(--bg); display:flex; flex-direction:column;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 20px; background:#FAFAFB; border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:20;
+  }
+  .topbar .icon-btn{
+    width:40px; height:40px; border-radius:50%; background:#fff; border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none;
+  }
+  .topbar .icon-btn svg{width:18px; height:18px;}
+  .topbar h1{font-size:15px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;}
+  .topbar .brand-mark{width:38px; height:38px; border-radius:50%; border:1px solid var(--border); background:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; color:var(--navy); cursor:pointer; user-select:none; transition:border-color .15s, background .15s;}
+  .topbar .brand-mark:active{background:var(--bg);}
+  .topbar .brand-mark.logged{border-color:var(--green); background:var(--green-bg-soft); color:var(--green); font-size:14px;}
+  .topbar .icon-btn.hidden{display:none;}
+
+  /* ---------- Brand logo (center) + Back to Shop (left) ---------- */
+  .brand-logo{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    display:flex; align-items:center; justify-content:center; text-decoration:none; max-width:46%;
+  }
+  .brand-logo img{height:30px; width:auto; max-width:100%; display:block; object-fit:contain;}
+  .brand-logo .wordmark{font-size:15px; font-weight:800; letter-spacing:.16em; color:var(--navy); white-space:nowrap;}
+  .shop-btn{
+    display:flex; align-items:center; gap:5px; height:40px; padding:0 13px 0 10px; flex:none;
+    border-radius:20px; background:#fff; border:1px solid var(--border);
+    font-size:12.5px; font-weight:700; color:var(--navy); text-decoration:none; white-space:nowrap;
+  }
+  .shop-btn svg{width:16px; height:16px; stroke:var(--navy); fill:none; stroke-width:2;}
+  .shop-btn:active{background:var(--bg);}
+  .shop-btn.hidden{display:none;}
+  .sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;}
+
+  /* ---------- User chip dropdown (logout) ---------- */
+  .user-wrap{position:relative; flex:none;}
+  .user-menu{
+    position:absolute; right:0; top:48px; min-width:210px; background:#fff;
+    border:1px solid var(--border); border-radius:14px; padding:8px;
+    box-shadow:0 10px 28px rgba(15,23,38,0.14);
+    opacity:0; transform:translateY(-6px) scale(.97); pointer-events:none;
+    transition:opacity .15s ease, transform .15s ease; z-index:60;
+  }
+  .user-menu.open{opacity:1; transform:none; pointer-events:auto;}
+  .user-menu .um-id{padding:8px 10px 10px; border-bottom:1px solid var(--border);}
+  .user-menu .um-id b{display:block; font-size:13px; font-weight:700; color:var(--text); margin-bottom:2px;}
+  .user-menu .um-id span{font-size:11.5px; color:var(--muted); word-break:break-all;}
+  .um-btn{
+    width:100%; display:flex; align-items:center; gap:9px; margin-top:6px;
+    background:transparent; border:none; font-family:inherit; font-size:13.5px; font-weight:600;
+    color:var(--danger); padding:10px; border-radius:10px; cursor:pointer; text-align:left;
+  }
+  .um-btn:hover,.um-btn:active{background:var(--danger-bg);}
+  .um-item{
+    width:100%; display:flex; align-items:center; gap:10px; margin-top:4px;
+    background:transparent; border:none; font-family:inherit; font-size:13.5px; font-weight:600;
+    color:var(--text); padding:10px; border-radius:10px; cursor:pointer; text-align:left; text-decoration:none;
+  }
+  .um-item:hover,.um-item:active{background:var(--bg);}
+  .um-item svg{width:17px; height:17px; stroke:var(--navy); fill:none; stroke-width:2; flex:none;}
+  .um-item.wa svg{stroke:#128C4A;}
+  .um-sep{height:1px; background:var(--border); margin:6px 2px;}
+
+  /* ---------- Manage address sheet ---------- */
+  .acct-addr-view{background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:13px 14px; font-size:13px; line-height:1.6;}
+  .acct-addr-view b{display:block; font-size:14px;}
+  .acct-lbl{display:block; font-size:11.5px; font-weight:700; color:var(--muted); margin:12px 0 5px;}
+  .acct-input{width:100%; padding:12px 13px; border-radius:12px; border:1px solid var(--border); background:#fff; font-family:inherit; font-size:14px; color:var(--text); outline:none;}
+  .acct-input:focus{border-color:var(--green);}
+  .acct-row{display:flex; gap:10px;}
+  .acct-row > div{flex:1; min-width:0;}
+  .acct-lock{margin-top:12px; background:#FFF6E5; border:1px solid #F5D998; color:#7A5C1E; border-radius:12px; padding:12px 13px; font-size:12.5px; line-height:1.5;}
+  .acct-err{display:none; margin-top:12px; background:var(--danger-bg); color:#9E2B2B; border-radius:10px; padding:10px 12px; font-size:12.5px; font-weight:600;}
+  .acct-err.show{display:block;}
+  .wa-btn{
+    width:100%; margin-top:12px; padding:14px; border:none; border-radius:var(--radius-sm);
+    background:#128C4A; color:#fff; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px; text-decoration:none;
+  }
+  .wa-btn svg{width:18px; height:18px; fill:#fff;}
+  .help-note a{color:#128C4A; font-weight:700; text-decoration:none;}
+  .um-btn svg{width:16px; height:16px; stroke:var(--danger); fill:none; stroke-width:2; flex:none;}
+  .sync-pill{
+    display:none; align-items:center; gap:6px; justify-content:center;
+    font-size:11.5px; font-weight:600; color:var(--muted); padding:8px 0 2px;
+  }
+  .sync-pill.show{display:flex;}
+  .sync-pill i{width:11px; height:11px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; display:block; animation:spin .7s linear infinite;}
+
+  main{flex:1; padding:22px 18px 100px;}
+  .screen{display:none;}
+  .screen.active{display:block; animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+
+  /* ---------- Card shell ---------- */
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:26px 22px; box-shadow:var(--shadow);
+  }
+  .eyebrow{font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--green);}
+  .h1{font-size:26px; font-weight:800; line-height:1.15; margin:8px 0 10px;}
+  .sub{font-size:14px; color:var(--muted); line-height:1.5; margin-bottom:22px;}
+
+  /* ---------- Inputs ---------- */
+  .field{
+    display:flex; align-items:center; gap:12px; background:var(--bg); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:14px; transition:border-color .12s;
+  }
+  .field:focus-within{border-color:var(--green);}
+  .field .ico{width:36px; height:36px; border-radius:10px; background:var(--green-bg-soft); display:flex; align-items:center; justify-content:center; flex:none;}
+  .field .ico svg{width:17px; height:17px; stroke:var(--green);}
+  .field input{
+    border:none; background:transparent; outline:none; width:100%; font-size:15px; font-family:inherit; color:var(--text);
+  }
+  .field input::placeholder{color:#9AA0AC;}
+  .field-label{font-size:12px; font-weight:700; color:var(--muted); margin-bottom:8px; display:block;}
+  .type-hint{font-size:11.5px; color:var(--green); font-weight:600; margin:-8px 0 14px 4px; min-height:14px;}
+
+  .btn-primary{
+    width:100%; padding:16px; border:none; border-radius:var(--radius-sm); background:var(--navy); color:#fff;
+    font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:opacity .15s;
+  }
+  .btn-primary:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-primary:active:not(:disabled){opacity:.85;}
+  .btn-secondary{
+    width:100%; padding:14px; border:1px solid var(--border); border-radius:var(--radius-sm); background:#fff; color:var(--text);
+    font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; margin-top:10px;
+  }
+  .link-btn{background:none; border:none; color:var(--green); font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;}
+
+  .help-note{
+    margin-top:18px; padding:16px; border:1px dashed var(--border); border-radius:var(--radius-md);
+    font-size:12.5px; color:var(--muted); line-height:1.5; background:#FBFBFC;
+  }
+
+  .error-banner{
+    display:none; align-items:flex-start; gap:10px; background:var(--danger-bg); border:1px solid #F2B9B9;
+    border-radius:var(--radius-sm); padding:13px 14px; margin-bottom:16px; font-size:13px; color:#9E2B2B; font-weight:600; line-height:1.4;
+  }
+  .error-banner.show{display:flex;}
+  .error-banner svg{width:17px; height:17px; stroke:#C93636; flex:none; margin-top:1px;}
+
+  /* ---------- Order header ---------- */
+  .order-header{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:20px; margin-bottom:16px; box-shadow:var(--shadow);
+  }
+  .order-header-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:6px;}
+  .order-id{font-size:16px; font-weight:800; color:var(--navy);}
+  .order-date{font-size:12px; color:var(--muted); margin-top:2px;}
+  .badge{
+    font-size:11px; font-weight:700; padding:5px 10px; border-radius:20px; white-space:nowrap; text-transform:capitalize;
+  }
+  .badge.delivered{background:var(--green-bg); color:#0A7A42;}
+  .badge.transit{
+    background:#FFF1CC; color:#946200; position:relative; overflow:hidden;
+  }
+  .badge.transit::after{
+    content:''; position:absolute; top:0; left:-100%; width:60%; height:100%;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+    animation: badgeShimmer 2.2s ease-in-out infinite;
+  }
+  @keyframes badgeShimmer{
+    0%{ left:-60%; }
+    100%{ left:130%; }
+  }
+  .badge.processing{background:#E4E9FF; color:#3949AB;}
+  .badge.cancelled{background:#FBE1E1; color:#B23434;}
+  .cancelled-note{margin-top:14px; background:#FBE1E1; color:#B23434; border-radius:10px; padding:12px 14px; font-size:12.5px; line-height:1.5;}
+  .cancel-order-btn{width:100%; border-color:#B23434; color:#B23434;}
+  .cancel-order-btn:hover{background:#FBE1E1;}
+  /* ---------- Cancelled / RTO card ---------- */
+  .cancel-card{margin-top:14px; background:#FDF1F1; border:1px solid #F3CFCF; border-radius:14px; padding:14px 15px;}
+  .cancel-card .cc-head{display:flex; align-items:flex-start; gap:9px; font-size:14.5px; font-weight:800; color:#B23434; line-height:1.35;}
+  .cancel-card .cc-head svg{width:18px; height:18px; stroke:#B23434; fill:none; stroke-width:2; flex:none; margin-top:1px;}
+  .cancel-card .cc-by{font-size:12.5px; color:#8E3A3A; margin-top:7px; line-height:1.55;}
+  .cancel-card .cc-by b{font-weight:700; color:#7A2E2E;}
+  .cancel-rows{margin-top:11px; border-top:1px solid #F3CFCF; padding-top:10px; display:grid; gap:7px;}
+  .cancel-rows .cr{display:flex; gap:10px; font-size:12.5px; line-height:1.5;}
+  .cancel-rows .cr>span{color:#A87878; min-width:104px; flex:none;}
+  .cancel-rows .cr>b{color:#7A2E2E; font-weight:600;}
+  .cancel-remark{margin-top:10px; background:#fff; border:1px dashed #E2B9B9; border-radius:10px; padding:9px 11px; font-size:12px; color:#7A2E2E; line-height:1.5;}
+  .cancel-remark i{display:block; font-style:normal; font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:#B08585; margin-bottom:4px;}
+  .cancel-foot{margin-top:11px; font-size:12px; color:#8E3A3A; line-height:1.5;}
+  .processing-note{margin-top:14px; background:var(--bg); color:var(--muted); border:1px solid var(--border); border-radius:10px; padding:12px 14px; font-size:12.5px; line-height:1.5;}
+  .order-header .delivered-line{font-size:12.5px; color:var(--muted); margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);}
+  .order-header .total-line{font-size:13px; color:var(--muted); margin-top:6px; display:flex; justify-content:space-between;}
+  .order-header .total-line b{color:var(--text); font-size:14.5px;}
+
+  .list-title{font-size:15px; font-weight:800; margin:20px 0 12px; color:var(--text);}
+
+  /* ---------- Item card (each product = own return/exchange) ---------- */
+  .item-card{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:16px; margin-bottom:12px; box-shadow:var(--shadow); animation:fade .3s ease;
+  }
+  .item-row{display:flex; align-items:center; gap:12px; margin-bottom:12px;}
+  .item-thumb{
+    width:56px; height:56px; border-radius:12px; object-fit:cover; background:var(--bg);
+    border:1px solid var(--border); flex:none;
+  }
+  .item-thumb.fallback{display:flex; align-items:center; justify-content:center;}
+  .item-thumb.fallback svg{width:20px; height:20px; stroke:#B4B9C4;}
+  .item-info{flex:1; min-width:0;}
+  .item-name{font-size:13.5px; font-weight:600; color:var(--text); line-height:1.35; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
+  .item-meta{font-size:12px; color:var(--muted); margin-top:2px;}
+  .item-price{font-size:13.5px; font-weight:700; color:var(--navy); flex:none; white-space:nowrap; text-align:right;}
+  .item-mrp{font-size:11px; color:var(--muted); text-decoration:line-through; font-weight:500;}
+  .item-paid{font-size:14px; font-weight:800; color:var(--navy);}
+  .item-off{font-size:10px; font-weight:700; color:#0A7A42; margin-top:2px;}
+  .price-breakdown{margin-top:8px; padding-top:10px; border-top:1px dashed var(--border);}
+  .price-row{display:flex; justify-content:space-between; font-size:12.5px; color:var(--muted); padding:3px 0;}
+  .price-row .strike{text-decoration:line-through; color:var(--muted);}
+  .price-row .off{color:#0A7A42; font-weight:600;}
+  .price-row .free-tag{color:#0A7A42; font-weight:700;}
+  .price-row.total{font-size:14.5px; font-weight:800; color:var(--text); border-top:1px solid var(--border); margin-top:4px; padding-top:8px;}
+  .savings-banner{margin-top:10px; background:var(--green-bg-soft, #EAF7EF); color:#0A7A42; font-weight:700; font-size:12.5px; text-align:center; padding:10px; border-radius:10px;}
+  .item-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .pill-btn{
+    flex:1; min-width:100px; padding:11px 10px; border-radius:12px; font-size:13px; font-weight:700; font-family:inherit;
+    cursor:pointer; text-align:center; border:1px solid var(--border); background:#fff; color:var(--text);
+    transition:transform .12s ease, opacity .12s ease;
+  }
+  .pill-btn:active{transform:scale(.96); opacity:.85;}
+  .pill-btn.track{color:var(--navy);}
+  .pill-btn.exchange{background:var(--green-bg-soft); border-color:var(--green); color:#0A7A42;}
+  .pill-btn.return{background:var(--danger-bg); border-color:#F2B9B9; color:var(--danger);}
+  .window-note{font-size:11.5px; color:var(--muted); margin-top:8px;}
+  .batch-select-lbl{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted); margin-top:8px; cursor:pointer;}
+  .batch-select-lbl input{width:15px; height:15px; accent-color:var(--green); cursor:pointer;}
+  .batch-bar{
+    position:fixed; left:16px; right:16px; bottom:16px; z-index:150;
+    background:var(--navy); color:#fff; border-radius:16px; padding:14px 16px;
+    display:none; align-items:center; justify-content:space-between; gap:10px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+  .batch-bar.show{display:flex;}
+  .batch-bar-count{font-size:13px; font-weight:700; white-space:nowrap;}
+  .batch-bar-actions{display:flex; gap:8px;}
+  .batch-bar .pill-btn{padding:9px 12px; font-size:12px; min-width:0;}
+  .window-closed{font-size:11.5px; color:#B23434; margin-top:8px; font-weight:600;}
+
+  .request-status{margin-top:10px; padding:11px 13px; border-radius:var(--radius-sm); font-size:12.5px; font-weight:600; line-height:1.5;}
+  .request-status.pending{background:#FFF1CC; color:#946200;}
+  .request-status.approved{background:var(--green-bg-soft); color:#0A7A42;}
+  .refund-box{background:#FFF8EC; border:1px solid #F0D9A8; border-radius:10px; padding:12px; font-size:12.5px; color:#7A5C1E; margin-top:8px; line-height:1.5;}
+  .refund-box.refund-done{background:var(--green-bg-soft); border-color:#BFE6CC; color:#0A7A42; font-weight:600;}
+  .method-toggle{display:flex; gap:8px;}
+  .method-btn{flex:1; min-width:0; padding:10px 8px; border-radius:10px; border:1.5px solid var(--border); background:#fff; font-family:inherit; font-size:12px; font-weight:600; color:var(--text); cursor:pointer;}
+  .method-btn.active{border-color:var(--green); background:var(--green-bg-soft); color:#0A7A42;}
+  .recommended-tag{display:inline-block; background:#0A7A42; color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:8px; margin-left:4px; vertical-align:middle;}
+  .bank-details-view{background:#fff; border-radius:10px; padding:10px 12px; font-size:12.5px; color:var(--text); line-height:1.6;}
+  .bank-details-lbl{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px;}
+  .request-status.disapproved{background:var(--danger-bg); color:var(--danger);}
+
+  .my-review-card{margin-top:10px; padding:12px 13px; border-radius:var(--radius-sm); background:var(--bg); border:1px solid var(--border);}
+  .my-review-card .lbl{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; display:block;}
+
+  /* ---------- Reviews ---------- */
+  .review-summary{
+    display:flex; align-items:center; gap:8px; margin-top:12px; padding-top:12px; border-top:1px dashed var(--border);
+  }
+  .stars{display:flex; gap:2px;}
+  .stars svg{width:14px; height:14px;}
+  .stars.readonly svg{fill:#E7E9EE; stroke:#E7E9EE;}
+  .stars.readonly svg.filled{fill:#F5A623; stroke:#F5A623;}
+  .review-summary-text{font-size:12px; color:var(--muted); font-weight:600;}
+  .review-cta-row{margin-top:10px;}
+  .pill-btn.review{background:#FFF6E5; border-color:#F5D998; color:#946200;}
+
+  .review-list{margin-top:12px; display:flex; flex-direction:column; gap:10px;}
+  .review-item{background:var(--bg); border-radius:var(--radius-sm); padding:12px;}
+  .review-item .stars{margin-bottom:6px;}
+  .review-item .rtext{font-size:12.5px; color:var(--text); line-height:1.5;}
+  .review-item .rdate{font-size:10.5px; color:var(--muted); margin-top:6px;}
+  .review-item img{width:100%; max-width:140px; border-radius:10px; margin-top:8px; border:1px solid var(--border);}
+  .review-toggle{background:none; border:none; color:var(--green); font-weight:700; font-size:12px; cursor:pointer; font-family:inherit; margin-top:10px; padding:0;}
+
+  .star-picker{display:flex; gap:8px; justify-content:center; margin-bottom:20px;}
+  .star-picker button{background:none; border:none; padding:4px; cursor:pointer;}
+  .star-picker svg{width:34px; height:34px; fill:#E7E9EE; stroke:#E7E9EE; transition:fill .1s, stroke .1s;}
+  .star-picker button.active svg{fill:#F5A623; stroke:#F5A623;}
+
+  .photo-upload{
+    border:1px dashed var(--border); border-radius:var(--radius-sm); padding:16px; text-align:center;
+    cursor:pointer; margin-bottom:16px; font-size:13px; color:var(--muted); position:relative;
+  }
+  .photo-upload input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .photo-preview{width:72px; height:72px; border-radius:12px; object-fit:cover; margin:0 auto 8px; display:none; border:1px solid var(--border);}
+  .photo-preview.show{display:block;}
+
+  .skeleton-card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius-md); padding:18px; margin-bottom:14px;}
+  .skel{background:linear-gradient(90deg,#EEF0F3 25%,#F7F8FA 37%,#EEF0F3 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; border-radius:8px;}
+  @keyframes shimmer{0%{background-position:100% 50%;} 100%{background-position:0 50%;}}
+
+  .empty-state{text-align:center; padding:50px 10px; color:var(--muted);}
+  .empty-state svg{width:52px; height:52px; margin-bottom:14px; opacity:.5;}
+  .loader{display:flex; justify-content:center; padding:60px 0;}
+  .spinner{width:30px; height:30px; border:3px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,23,38,0.45); display:none; align-items:flex-end; justify-content:center; z-index:50;}
+  .modal-overlay.active{display:flex;}
+  .modal-card{
+    width:100%; max-width:480px; background:#fff; border-radius:24px 24px 0 0; padding:26px 22px 26px;
+    max-height:88vh; overflow-y:auto; animation:slideUp .25s ease;
+    overscroll-behavior:contain;
+  }
+  .modal-card.dragging{animation:none; will-change:transform;}
+  @keyframes slideUp{from{transform:translateY(30px); opacity:0;} to{transform:none; opacity:1;}}
+  .modal-handle{width:40px; height:4px; background:var(--border); border-radius:4px; margin:0 auto 18px; cursor:grab;}
+  .sheet-end-hint{text-align:center; font-size:11.5px; color:var(--muted); padding:14px 0 2px; opacity:.85;}
+  .modal-title{font-size:19px; font-weight:800; margin-bottom:4px;}
+  .modal-sub{font-size:13px; color:var(--muted); margin-bottom:20px;}
+  .modal-order-summary{display:flex; align-items:center; gap:12px; background:var(--bg); border-radius:var(--radius-sm); padding:12px; margin-bottom:20px;}
+  .modal-order-summary img{width:50px; height:50px; border-radius:10px; object-fit:cover; border:1px solid var(--border); flex:none; background:#fff;}
+  .modal-order-summary .msum-text{min-width:0;}
+  .modal-order-summary b{display:block; font-size:13.5px; margin-bottom:2px;}
+  .modal-order-summary span{font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical;}
+  .batch-item-name{font-size:12px; color:var(--muted); margin-top:2px;}
+
+  .reason-grid{display:flex; flex-direction:column; gap:10px; margin-bottom:16px;}
+  .reason-chip{
+    display:flex; align-items:center; gap:12px; padding:14px; border:1px solid var(--border); border-radius:var(--radius-sm);
+    cursor:pointer; font-size:14px; font-weight:600; transition:all .12s;
+  }
+  .reason-chip:active{transform:scale(.98);}
+  .reason-chip .ico{width:34px; height:34px; border-radius:10px; background:var(--bg); display:flex; align-items:center; justify-content:center; flex:none;}
+  .reason-chip .ico svg{width:16px; height:16px; stroke:#6B7280;}
+  .reason-chip span{flex:1;}
+  .reason-chip .dot{width:18px; height:18px; border-radius:50%; border:2px solid var(--border); flex:none; position:relative;}
+  .reason-chip.selected{border-color:var(--green); background:var(--green-bg-soft);}
+  .reason-chip.selected .ico{background:#fff;}
+  .reason-chip.selected .ico svg{stroke:var(--green);}
+  .reason-chip.selected .dot{border-color:var(--green);}
+  .reason-chip.selected .dot::after{content:''; position:absolute; inset:3px; background:var(--green); border-radius:50%;}
+
+  textarea{
+    width:100%; border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px; font-family:inherit;
+    font-size:14px; resize:vertical; min-height:90px; outline:none; margin-bottom:6px; display:none; background:var(--bg);
+  }
+  textarea.active{display:block;}
+  .char-count{font-size:11px; color:var(--muted); text-align:right; margin-bottom:16px;}
+
+  .modal-actions{display:flex; gap:10px; margin-top:6px;}
+  .modal-actions .btn-secondary{margin-top:0;}
+
+  .address-box{
+    background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px;
+    font-size:13px; color:var(--text); line-height:1.5; margin-bottom:8px;
+  }
+  .address-box b{display:block; font-size:13.5px; margin-bottom:2px;}
+  .address-box .muted{color:var(--muted);}
+  .address-form{margin-bottom:8px;}
+  .address-form .field{margin-bottom:10px;}
+  .address-row{display:flex; gap:10px;}
+  .address-row .field{flex:1;}
+  .address-actions{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+
+  /* ---------- Toast ---------- */
+  #toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:var(--navy); color:#fff; padding:13px 20px; border-radius:14px; font-size:13.5px; font-weight:600;
+    max-width:90%; text-align:center; z-index:100; transition:all .25s ease; pointer-events:none;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  .success-wrap{text-align:center; padding:10px 4px 4px;}
+  .success-wrap .check{
+    width:64px; height:64px; border-radius:50%; background:var(--green-bg); display:flex; align-items:center; justify-content:center;
+    margin:0 auto 18px;
+  }
+  .success-wrap .check svg{width:28px; height:28px; stroke:#0A7A42;}
+
+  /* ---------- Live Tracking modal ---------- */
+  .track-courier{font-size:12.5px; color:var(--muted); margin-bottom:18px;}
+  .track-note{background:#EAF7EF; border:1px solid #BFE6CC; border-radius:10px; padding:10px 12px; font-size:12.5px; color:#0A7A42; margin-bottom:12px; line-height:1.5;}
+  .track-partner{font-size:12.5px; color:var(--text); margin-bottom:14px;}
+  .track-qc{margin-top:16px; border-top:1px dashed var(--border); padding-top:14px;}
+  .track-qc-title{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:8px;}
+  .track-qc-row{font-size:12.5px; margin-bottom:8px;}
+  .qc-pass{color:#0A7A42; font-weight:600;}
+  .qc-fail{color:#9E2B2B; font-weight:600;}
+  .qc-pending{color:var(--muted);}
+  .track-photos{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+  .track-photos img{width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--border);}
+  .track-courier b{color:var(--text);}
+  .track-steps{display:flex; align-items:flex-start; margin-bottom:26px;}
+  .track-step{flex:1; text-align:center; position:relative;}
+  .track-step .dot{width:22px; height:22px; border-radius:50%; background:var(--border); margin:0 auto 6px; display:flex; align-items:center; justify-content:center; position:relative; z-index:1;}
+  .track-step .dot svg{width:12px; height:12px; stroke:#fff; display:none;}
+  .track-step.done .dot{background:var(--green);}
+  .track-step.done .dot svg{display:block;}
+  .track-step.current .dot{background:var(--navy); box-shadow:0 0 0 4px var(--green-bg-soft);}
+  .track-step .line{position:absolute; top:11px; left:-50%; width:100%; height:2px; background:var(--border); z-index:0;}
+  .track-step:first-child .line{display:none;}
+  .track-step.done .line, .track-step.current .line{background:var(--green);}
+  .track-step .lbl{font-size:9.5px; color:var(--muted); font-weight:600; line-height:1.2;}
+  .track-step.done .lbl, .track-step.current .lbl{color:var(--text);}
+
+  .track-timeline{border-left:2px solid var(--border); margin-left:6px; padding-left:18px;}
+  .track-event{position:relative; padding-bottom:20px;}
+  .track-event:last-child{padding-bottom:0;}
+  .track-event::before{content:''; position:absolute; left:-23px; top:3px; width:10px; height:10px; border-radius:50%; background:var(--green); border:2px solid #fff; box-shadow:0 0 0 1px var(--green);}
+  .track-event .t-title{font-size:13.5px; font-weight:700; color:var(--text);}
+  .track-event .t-meta{font-size:11.5px; color:var(--muted); margin-top:2px;}
+  .track-error{text-align:center; padding:30px 10px; color:var(--muted); font-size:13.5px;}
+  .inline-track{background:#fff; border-radius:12px; padding:14px 12px 4px; margin-top:10px; color:var(--text); font-weight:400;}
+  .inline-track .track-steps{margin-bottom:18px;}
+  .inline-track .track-timeline{margin-bottom:6px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="icon-btn hidden" id="backBtn" onclick="goBack()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#12141B" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <a class="shop-btn" id="shopBtn" href="https://smarticlab.in/">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+      Shop
+    </a>
+
+    <a class="brand-logo" id="brandLogo" href="https://smarticlab.in/" aria-label="Smarticlab home">
+      <span class="wordmark">SMARTICLAB</span>
+    </a>
+    <h1 id="topbarTitle" class="sr-only">Track Order</h1>
+
+    <div class="user-wrap">
+      <div class="brand-mark" id="userChip" onclick="toggleUserMenu(event)">SL</div>
+      <div class="user-menu" id="userMenu">
+        <div class="um-id">
+          <b id="umName">Not signed in</b>
+          <span id="umIdentifier">Find your order to continue</span>
+        </div>
+        <button class="um-item" id="umAddress" style="display:none;" onclick="openManageAddress()">
+          <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          Manage Address
+        </button>
+        <button class="um-item wa" onclick="openSupport()">
+          <svg viewBox="0 0 24 24"><path d="M21 12a8.5 8.5 0 01-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1121 12z"/></svg>
+          Support on WhatsApp
+        </button>
+        <div class="um-sep" id="umSep" style="display:none;"></div>
+        <button class="um-btn" id="umLogout" style="display:none;" onclick="logoutSession()">
+          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          Logout
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <main>
+
+    <!-- ===================== SCREEN 1 — ORDER LOOKUP ===================== -->
+    <section class="screen active" id="screen-lookup">
+      <div class="card">
+        <div class="eyebrow">Returns &amp; Exchange</div>
+        <div class="h1">Find your order</div>
+        <p class="sub">Enter your Order Number along with the phone number or email used while placing the order.</p>
+
+        <div class="error-banner" id="lookupError">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span id="lookupErrorText">Please check your Order No and Phone/Email.</span>
+        </div>
+
+        <span class="field-label">Order Number</span>
+        <div class="field">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></span>
+          <input type="text" id="orderNoInput" placeholder="e.g. 10482" inputmode="numeric">
+        </div>
+
+        <span class="field-label">Phone Number or Email</span>
+        <div class="field">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></span>
+          <input type="text" id="identifierInput" placeholder="98765 43210 or you@email.com" autocomplete="off">
+        </div>
+        <div class="type-hint" id="typeHint">&nbsp;</div>
+
+        <button class="btn-primary" id="lookupBtn" onclick="lookupOrder()">Track / Verify</button>
+
+        <div class="help-note">
+          Please enter the correct Order No and the phone number or email used while placing this order. If you still need help, <a href="#" onclick="openSupport(); return false;">chat with us on WhatsApp</a>.
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== SCREEN 2 — ORDER DETAIL ===================== -->
+    <!-- ===================== MANAGE ADDRESS SHEET ===================== -->
+    <div class="modal-overlay" id="acctAddrModal">
+      <div class="modal-card">
+        <div class="modal-handle"></div>
+        <h3 style="font-size:18px; font-weight:800; margin-bottom:4px;">Delivery Address</h3>
+        <div style="font-size:12.5px; color:var(--muted); margin-bottom:14px;" id="acctAddrSub">Order</div>
+        <div id="acctAddrBody"></div>
+      </div>
+    </div>
+
+    <section class="screen" id="screen-order">
+      <div class="sync-pill" id="syncPill"><i></i> Refreshing your order…</div>
+      <div id="orderContainer">
+        <div class="loader"><div class="spinner"></div></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== FLOATING BATCH ACTION BAR ===================== -->
+  <div id="batchBar" class="batch-bar">
+    <div class="batch-bar-count"><span id="batchCount">0</span> items selected</div>
+    <div class="batch-bar-actions">
+      <button class="pill-btn exchange" onclick="openBatchRequest('Exchange')">Exchange Together</button>
+      <button class="pill-btn return" onclick="openBatchRequest('Return')">Return Together</button>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL — RETURN / EXCHANGE ===================== -->
+  <div class="modal-overlay" id="requestModal">
+    <div class="modal-card">
+      <div class="modal-handle"></div>
+
+      <div id="modalForm">
+        <div class="modal-title" id="modalTitle">Return Request</div>
+        <div class="modal-sub" id="modalSub">Tell us why you'd like to return this item.</div>
+
+        <div class="modal-order-summary" id="modalOrderSummary"></div>
+
+        <!-- ---- STEP 1: REASON ---- -->
+        <div id="stepReason">
+          <div class="reason-grid" id="reasonGrid"></div>
+
+          <div id="exchangeSizeColorBox" style="display:none; margin-top:12px;">
+            <div class="field"><input type="text" id="desiredSize" placeholder="Desired Size (e.g. 40, L, XL)"></div>
+            <div class="field" style="margin-top:8px;"><input type="text" id="desiredColor" placeholder="Desired Colour"></div>
+          </div>
+
+          <textarea id="customReasonBox" placeholder="Please describe the issue (at least 3 words)..." maxlength="300"></textarea>
+          <div class="char-count" id="charCount" style="display:none">0 / 300</div>
+
+          <div class="modal-actions" style="margin-top:16px">
+            <button class="btn-secondary" style="flex:1" onclick="closeModal()">Cancel</button>
+            <button class="btn-primary" style="flex:1" id="nextToAddressBtn" onclick="goToAddressStep()" disabled>Next</button>
+          </div>
+        </div>
+
+        <!-- ---- STEP 2: PICKUP ADDRESS ---- -->
+        <div id="stepAddress" style="display:none">
+          <span class="field-label">Pickup Address</span>
+          <div class="address-box" id="addressDisplay"></div>
+
+          <div class="address-form" id="addressForm" style="display:none">
+            <div class="field"><input type="text" id="addrName" placeholder="Full Name"></div>
+            <div class="field"><input type="tel" id="addrPhone" placeholder="Phone Number" maxlength="10"></div>
+            <div class="field"><input type="text" id="addrLine1" placeholder="Address Line 1"></div>
+            <div class="field"><input type="text" id="addrLine2" placeholder="Address Line 2 (optional)"></div>
+            <div class="field"><input type="text" id="addrCity" placeholder="City"></div>
+            <div class="address-row">
+              <div class="field"><input type="text" id="addrState" placeholder="State"></div>
+              <div class="field"><input type="text" id="addrPincode" placeholder="Pincode" maxlength="6"></div>
+            </div>
+          </div>
+
+          <div class="address-actions" id="addressActions">
+            <button class="link-btn" onclick="editAddress()">Edit address</button>
+            <span style="color:var(--border)">|</span>
+            <button class="link-btn" onclick="useNewAddress()">Use a different address</button>
+          </div>
+
+          <div class="modal-actions" style="margin-top:16px">
+            <button class="btn-secondary" style="flex:1" onclick="backToReasonStep()">Back</button>
+            <button class="btn-primary" style="flex:1" id="submitRequestBtn" onclick="submitRequest()" disabled>Submit Request</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="modalSuccess" style="display:none">
+        <div class="success-wrap">
+          <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="modal-title">Request Received</div>
+          <p class="sub" style="margin-bottom:8px">Your request has been sent to our team for review. We'll get back to you shortly — usually within 24–48 hours.</p>
+          <button class="btn-primary" onclick="closeModal()">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL — LIVE TRACKING ===================== -->
+  <div class="modal-overlay" id="trackingModal">
+    <div class="modal-card">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Live Tracking</div>
+      <div class="modal-sub" id="trackingSub">Order #</div>
+      <div id="trackingBody">
+        <div class="loader"><div class="spinner"></div></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" style="flex:1" onclick="closeTrackingModal()">Close</button>
+      </div>
+      <div class="sheet-end-hint">Tap outside, or swipe down from the top, to close</div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL — CANCEL ORDER ===================== -->
+  <div class="modal-overlay" id="cancelOrderModal">
+    <div class="modal-card">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Cancel This Order?</div>
+      <div class="modal-sub">This cannot be undone. Please let us know why — it helps us improve.</div>
+
+      <div class="reason-grid" id="cancelReasonGrid"></div>
+
+      <textarea id="cancelReasonBox" placeholder="Tell us a bit more (at least 3 words)..." maxlength="300"></textarea>
+      <div class="char-count" id="cancelCharCount" style="display:none">0 / 300</div>
+
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn-secondary" style="flex:1" onclick="closeCancelOrderModal()">Keep Order</button>
+        <button class="btn-primary" style="flex:1; background:var(--danger, #B23434); border-color:var(--danger, #B23434);" id="confirmCancelOrderBtn" onclick="submitCancelOrder()" disabled>Yes, Cancel Order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL — WRITE A REVIEW ===================== -->
+  <div class="modal-overlay" id="reviewModal">
+    <div class="modal-card">
+      <div class="modal-handle"></div>
+
+      <div id="reviewForm">
+        <div class="modal-title">Rate this product</div>
+        <div class="modal-sub">Your feedback helps other customers.</div>
+
+        <div class="modal-order-summary" id="reviewItemSummary"></div>
+
+        <div class="star-picker" id="starPicker">
+          <button type="button" data-star="1" onclick="setRating(1)"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+          <button type="button" data-star="2" onclick="setRating(2)"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+          <button type="button" data-star="3" onclick="setRating(3)"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+          <button type="button" data-star="4" onclick="setRating(4)"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+          <button type="button" data-star="5" onclick="setRating(5)"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+        </div>
+
+        <textarea id="reviewTextBox" class="active" placeholder="How was the fit, fabric, quality? (optional)" maxlength="500" style="margin-bottom:16px;"></textarea>
+
+        <!-- Photo upload abhi hide hai — baad me isse hataakar wapas enable kar sakte ho -->
+        <label class="photo-upload" id="photoUploadLabel" style="display:none">
+          <img class="photo-preview" id="photoPreview">
+          <span id="photoUploadText">📷 Add a photo (optional)</span>
+          <input type="file" accept="image/*" id="reviewPhotoInput" onchange="handlePhotoSelect(event)">
+        </label>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" style="flex:1" onclick="closeReviewModal()">Cancel</button>
+          <button class="btn-primary" style="flex:1" id="submitReviewBtn" onclick="submitReview()" disabled>Submit Review</button>
+        </div>
+      </div>
+
+      <div id="reviewSuccess" style="display:none">
+        <div class="success-wrap">
+          <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="modal-title">Thanks for the review!</div>
+          <p class="sub" style="margin-bottom:8px">It'll appear on this product shortly.</p>
+          <button class="btn-primary" onclick="closeReviewModal()">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script>
+/* ============================================================================
+   CONFIG — apne n8n webhook URLs yaha daalo, aur demoMode false kar do
+   ============================================================================ */
+const CONFIG = {
+  demoMode: false, // live n8n se connect hai
+
+  // ---- Branding ----
+  shopUrl: "https://smarticlab.in/",
+  // Apna logo URL yahan daalo (WordPress Media Library se copy karo).
+  // Khaali chhodoge to "SMARTICLAB" text dikhega.
+  logoUrl: "https://smarticlab.in/wp-content/uploads/2026/05/sing-png.png",
+
+  // ---- Support ----
+  supportWhatsApp: "918000575822",
+
+  lookupOrderUrl:   "https://auto.rohitvision.com/webhook/lookup-order",
+  updateAddressUrl: "https://auto.rohitvision.com/webhook/update-order-address",
+  submitRequestUrl: "https://auto.rohitvision.com/webhook/submit-return-request",
+  submitBankDetailsUrl: "https://auto.rohitvision.com/webhook/submit-bank-details",
+  cancelOrderUrl: "https://auto.rohitvision.com/webhook/customer-cancel-order",
+  submitReviewUrl:  "https://auto.rohitvision.com/webhook/submit-review",
+  getReviewsUrl:    "https://auto.rohitvision.com/webhook/get-reviews",
+  trackOrderUrl:    "https://auto.rohitvision.com/webhook/track-order",
+  exchangeWindowDays: 7,   // delivery ke baad exchange kitne din tak allowed
+  returnWindowDays: 7      // delivery ke baad return kitne din tak allowed
+};
+
+/* Demo data — sirf tab use hota hai jab CONFIG.demoMode = true.
+   Test: Order No 10482 + Phone 9876543210 (ya Email demo@smarticlab.in) */
+const DEMO_ORDER = {
+  id: 10482, number: "10482",
+  date_created: daysAgoISO(3),
+  status: "delivered",
+  delivered_date: daysAgoISO(2),
+  total: "2397.00",
+  billing_phone: "9876543210",
+  billing_email: "demo@smarticlab.in",
+  shipping_address: {
+    name: "Rohit Kumar", phone: "9876543210",
+    address_line1: "12/4 MG Road", address_line2: "Near City Mall",
+    city: "Indore", state: "Madhya Pradesh", pincode: "452001"
+  },
+  line_items: [
+    { product_id: 501, name: "Slim Fit Chinos — Charcoal Grey", quantity: 1, price: "799.00", image: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=200&h=200&fit=crop" },
+    { product_id: 502, name: "Relaxed Fit Trousers — Olive", quantity: 2, price: "799.00", image: "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=200&h=200&fit=crop" }
+  ]
+};
+function daysAgoISO(n){ const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString(); }
+
+/* ============================================================================
+   STATE (kept in memory only — no localStorage, resets on page reload)
+   ============================================================================ */
+const state = {
+  order: null,
+  identifier: "",
+  identifierType: "",
+  activeItem: null, // { item, itemIndex, type: 'Return' | 'Exchange' } — single-item mode
+  batchItems: null, // array of { item, itemIndex } — set when submitting multiple items together
+  selectedForBatch: new Set(), // itemIndex set — checkbox selections on the order page
+  reason: null,
+  cancelTarget: null, // { orderNumber, orderId } — set when Cancel Order modal opens
+  cancelReason: null,
+  trackingCache: null   // { number, data } — lookup ke waqt pre-fetch ki hui courier tracking
+};
+
+/* ============================================================================
+   SESSION — reload par order screen wahi rehti hai (logout tak)
+   ============================================================================ */
+const SESSION_KEY = 'sl_order_session_v1';
+const SESSION_TTL_HOURS = 24;   // itne ghante baad session apne aap khatam
+
+function saveSession(){
+  if(!state.order || !state.identifier) return;
+  try{
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      orderNo: state.order.number,
+      identifier: state.identifier,
+      identifierType: state.identifierType,
+      order: state.order,
+      savedAt: Date.now()
+    }));
+  }catch(e){ /* storage blocked — chalne do */ }
+}
+
+function readSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_KEY);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(!s || !s.orderNo || !s.identifier) return null;
+    if(Date.now() - (s.savedAt || 0) > SESSION_TTL_HOURS * 3600000){ clearSession(); return null; }
+    return s;
+  }catch(e){ return null; }
+}
+
+function clearSession(){
+  try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+}
+
+/* Page load par session restore — pehle cached order turant dikhao,
+   phir background me server se fresh data le aao */
+async function restoreSession(){
+  const s = readSession();
+  updateUserChip();
+  if(!s) return;
+
+  state.identifier = s.identifier;
+  state.identifierType = s.identifierType || detectIdentifierType(s.identifier);
+
+  // history ko saaf rakho: base entry = lookup, phir order push hoga
+  try{ history.replaceState({ screen:'lookup' }, '', location.pathname + location.search); }catch(e){}
+
+  if(s.order){
+    state.order = s.order;
+    try{
+      showScreen('order');
+      renderOrderDetail(state.order);
+    }catch(err){
+      // Purane version ka cached order render nahi hua -> session saaf karke lookup par wapas
+      console.warn('Saved session broken, clearing', err);
+      clearSession();
+      state.order = null; state.identifier = ''; state.identifierType = '';
+      showScreen('lookup');
+      updateUserChip();
+      return;
+    }
+  }else{
+    showScreen('order');
+    document.getElementById('orderContainer').innerHTML = '<div class="loader"><div class="spinner"></div></div>';
+  }
+  updateUserChip();
+  refreshOrderFromServer(s.orderNo, state.identifier, state.identifierType, !s.order);
+}
+
+/* Silently re-fetch the order so refresh ke baad data purana na dikhe */
+async function refreshOrderFromServer(orderNo, identifier, type, hardFail){
+  if(CONFIG.demoMode) return;
+  setSyncing(true);
+  try{
+    const res = await fetch(CONFIG.lookupOrderUrl, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ order_no: orderNo, identifier: identifier, type: type })
+    });
+    const result = await res.json();
+
+    if(result && result.success && result.order){
+      state.order = normalizeOrder(result.order);
+      state.selectedForBatch.clear();
+      renderOrderDetail(state.order);
+      updateUserChip();
+      saveSession();
+      state.trackingCache = null;
+      prefetchTrackingStatus();   // background me — cached order pehle hi dikh chuka hai
+    }else{
+      // order ab valid nahi (cancelled/deleted/galat) — session tod do
+      logoutSession(true);
+      showLookupError((result && result.message) || 'Session expired. Please find your order again.');
+    }
+  }catch(err){
+    // network down — cached data hi dikhate rahenge
+    if(hardFail){
+      logoutSession(true);
+      showLookupError("Couldn't load your order. Please try again.");
+    }else{
+      toast("Offline — showing last saved details.");
+    }
+  }finally{
+    setSyncing(false);
+  }
+}
+
+function setSyncing(on){
+  const el = document.getElementById('syncPill');
+  if(el) el.classList.toggle('show', !!on);
+}
+
+function logoutSession(silent){
+  clearSession();
+  state.order = null;
+  state.identifier = "";
+  state.identifierType = "";
+  state.activeItem = null;
+  state.batchItems = null;
+  state.selectedForBatch.clear();
+  state.reason = null;
+  state.cancelTarget = null;
+  state.cancelReason = null;
+  state.trackingCache = null;
+
+  closeUserMenu();
+  document.getElementById('orderContainer').innerHTML = '<div class="loader"><div class="spinner"></div></div>';
+  document.getElementById('orderNoInput').value = '';
+  document.getElementById('identifierInput').value = '';
+  document.getElementById('typeHint').innerHTML = '&nbsp;';
+  document.getElementById('lookupError').classList.remove('show');
+  const bb = document.getElementById('batchBar');
+  if(bb) bb.classList.remove('show');
+
+  showScreen('lookup');
+  updateUserChip();
+  if(!silent) toast('Logged out');
+}
+
+/* ============================================================================
+   USER CHIP + DROPDOWN
+   ============================================================================ */
+function updateUserChip(){
+  const chip = document.getElementById('userChip');
+  const nameEl = document.getElementById('umName');
+  const idEl = document.getElementById('umIdentifier');
+  const logoutBtn = document.getElementById('umLogout');
+  if(!chip) return;
+
+  if(state.order){
+    const nm = ((state.order.shipping_address && state.order.shipping_address.name) || '').trim();
+    chip.textContent = nm ? nm.charAt(0).toUpperCase() : 'SL';
+    chip.classList.add('logged');
+    nameEl.textContent = nm || ('Order #' + state.order.number);
+    idEl.textContent = state.identifier || ('Order #' + state.order.number);
+    logoutBtn.style.display = 'flex';
+    document.getElementById('umAddress').style.display = 'flex';
+    document.getElementById('umSep').style.display = 'block';
+  }else{
+    chip.textContent = 'SL';
+    chip.classList.remove('logged');
+    nameEl.textContent = 'Not signed in';
+    idEl.textContent = 'Find your order to continue';
+    logoutBtn.style.display = 'none';
+    document.getElementById('umAddress').style.display = 'none';
+    document.getElementById('umSep').style.display = 'none';
+  }
+}
+
+function toggleUserMenu(e){
+  if(e) e.stopPropagation();
+  document.getElementById('userMenu').classList.toggle('open');
+}
+function closeUserMenu(){
+  const m = document.getElementById('userMenu');
+  if(m) m.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const wrap = e.target.closest && e.target.closest('.user-wrap');
+  if(!wrap) closeUserMenu();
+});
+
+/* ============================================================================
+   SCREEN NAVIGATION
+   ============================================================================ */
+function showScreen(name, opts){
+  opts = opts || {};
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  const titles = { lookup: "Track Order", order: "Order Details" };
+  document.getElementById('topbarTitle').textContent = titles[name] || "Track Order";
+
+  // Back button sirf order screen par
+  const backBtn = document.getElementById('backBtn');
+  if(backBtn) backBtn.classList.toggle('hidden', name === 'lookup');
+  const shopBtn = document.getElementById('shopBtn');
+  if(shopBtn) shopBtn.classList.toggle('hidden', name !== 'lookup');
+
+  closeUserMenu();
+  window.scrollTo({ top: 0 });
+
+  if(!opts.fromHistory){
+    try{
+      if(name === 'order') history.pushState({ screen:'order' }, '', '#order');
+      else history.replaceState({ screen:'lookup' }, '', location.pathname + location.search);
+    }catch(e){}
+  }
+}
+
+/* Device/browser back = sirf order screen band ho, page chhode nahi */
+window.addEventListener('popstate', (e) => {
+  const scr = (e.state && e.state.screen) || 'lookup';
+  if(scr === 'order' && state.order){
+    showScreen('order', { fromHistory:true });
+  }else{
+    showScreen('lookup', { fromHistory:true });
+  }
+});
+
+function goBack(){
+  const active = document.querySelector('.screen.active').id;
+  if(active === 'screen-order') history.back();
+}
+
+/* ============================================================================
+   TOAST
+   ============================================================================ */
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ============================================================================
+   SMART PHONE / EMAIL FIELD
+   Number type kare -> sirf digits allow (auto-filter).
+   Letters ya @ type kare -> email maana jata hai, jaisa hai waisa rehta hai.
+   ============================================================================ */
+const identifierInput = document.getElementById('identifierInput');
+identifierInput.addEventListener('input', (e) => {
+  let v = e.target.value;
+  if(/[a-zA-Z@]/.test(v)){
+    // looks like an email — leave as typed
+  }else{
+    v = v.replace(/\D/g, '').slice(0, 10);
+    e.target.value = v;
+  }
+  updateTypeHint(v);
+});
+
+function detectIdentifierType(v){
+  return v.includes('@') ? 'email' : 'phone';
+}
+
+function updateTypeHint(v){
+  const hint = document.getElementById('typeHint');
+  if(!v){ hint.innerHTML = '&nbsp;'; return; }
+  if(detectIdentifierType(v) === 'email'){
+    hint.textContent = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? '✓ Looks like a valid email' : 'Enter a valid email';
+  }else{
+    hint.textContent = v.length === 10 ? '✓ Looks like a valid phone number' : `${v.length}/10 digits`;
+  }
+}
+
+/* ============================================================================
+   STEP 1 — LOOKUP ORDER
+   ============================================================================ */
+async function lookupOrder(){
+  const orderNo = document.getElementById('orderNoInput').value.trim();
+  const identifierRaw = document.getElementById('identifierInput').value.trim();
+  const errorBox = document.getElementById('lookupError');
+  const errorText = document.getElementById('lookupErrorText');
+  errorBox.classList.remove('show');
+
+  if(!orderNo){
+    showLookupError('Please enter your Order No.');
+    return;
+  }
+
+  const type = detectIdentifierType(identifierRaw);
+  if(type === 'phone' && !/^[6-9]\d{9}$/.test(identifierRaw)){
+    showLookupError('Please enter a valid 10-digit phone number, or switch to your email.');
+    return;
+  }
+  if(type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifierRaw)){
+    showLookupError('Please enter a valid email address.');
+    return;
+  }
+
+  state.identifier = identifierRaw;
+  state.identifierType = type;
+
+  const btn = document.getElementById('lookupBtn');
+  btn.disabled = true;
+  btn.textContent = "Checking...";
+
+  try{
+    let result;
+    if(CONFIG.demoMode){
+      await new Promise(r => setTimeout(r, 500));
+      const matchOrderNo = orderNo === DEMO_ORDER.number;
+      const matchIdentifier = type === 'phone'
+        ? identifierRaw === DEMO_ORDER.billing_phone
+        : identifierRaw.toLowerCase() === DEMO_ORDER.billing_email.toLowerCase();
+
+      if(!matchOrderNo){
+        result = { success: false, message: "Order not found. Please check your Order No." };
+      }else if(!matchIdentifier){
+        result = { success: false, message: "Please check your Order No and Phone/Email." };
+      }else{
+        result = { success: true, order: DEMO_ORDER };
+      }
+    }else{
+      const res = await fetch(CONFIG.lookupOrderUrl, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ order_no: orderNo, identifier: identifierRaw, type })
+      });
+      result = await res.json();
+    }
+
+    if(!result.success){
+      showLookupError(result.message || 'Please check your Order No and Phone/Email.');
+      return;
+    }
+
+    state.order = normalizeOrder(result.order);
+    state.trackingCache = null;
+
+    // Pehla paint sahi ho — courier scans check hone tak (max 4.5s) ruk jao
+    btn.textContent = "Loading your order...";
+    await Promise.race([
+      prefetchTrackingStatus(),
+      new Promise(r => setTimeout(r, 4500))
+    ]);
+
+    showScreen('order');
+    renderOrderDetail(state.order);
+    updateUserChip();
+    saveSession();
+  }catch(err){
+    showLookupError("Couldn't verify right now. Please try again.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Track / Verify";
+  }
+}
+
+function showLookupError(msg){
+  document.getElementById('lookupErrorText').textContent = msg;
+  document.getElementById('lookupError').classList.add('show');
+}
+
+/* Tolerant normalizer for a raw WooCommerce order object */
+function normalizeOrder(o){
+  return {
+    id: o.id,
+    number: o.number || o.id,
+    date_created: o.date_created,
+    status: (o.status || "").toLowerCase(),
+    live_status_label: o.live_status_label || null,
+    delivered_date: o.delivered_date || (o.meta_data || []).find(m => m.key === 'delivered_date')?.value || null,
+    return_until: o.return_until || null,
+    exchange_until: o.exchange_until || null,
+    return_tracking: o.return_tracking || null,
+    exchange_delivery_tracking: o.exchange_delivery_tracking || null,
+    awb: o.awb || '',
+    cancellation: o.cancellation || null,
+    cancel_until: o.cancel_until || null,
+    can_cancel_now: !!o.can_cancel_now,
+    total: o.total,
+    pricing: o.pricing || null,
+    shipping_address: o.shipping_address || null,
+    line_items: (o.line_items || []).map(li => ({
+      product_id: li.product_id, name: li.name, quantity: li.quantity, price: li.price, image: li.image || '',
+      regular_price: li.regular_price || null,
+      discount_percent: li.discount_percent || 0,
+      request_id: li.request_id || null,
+      request_status: li.request_status || null, request_type: li.request_type || null, request_note: li.request_note || '',
+      request_awb: li.request_awb || '', request_awb_courier: li.request_awb_courier || '',
+      request_bank_submitted: !!li.request_bank_submitted,
+      request_bank_details: li.request_bank_details || null,
+      request_refund_transaction_id: li.request_refund_transaction_id || null,
+      request_refund_method: li.request_refund_method || null,
+      customer_stage: li.customer_stage || null
+    }))
+  };
+}
+
+/* ============================================================================
+   CANCELLATION / RTO CARD
+   Order cancel ho gaya (customer ne mana kiya, RTO ho gaya, ya khud cancel kiya)
+   to customer ko live tracking NAHI dikhani — sirf saaf-saaf cancel ka reason,
+   kisne kiya, kab kiya, aur courier ka remark.
+   ============================================================================ */
+function cancelActorOf(o){
+  const c = o.cancellation || {};
+  const raw = String(c.by || c.cancelled_by || c.actor || c.category || '').toLowerCase();
+  if(/admin|store|seller|merchant|smarticlab|staff/.test(raw)) return 'store';
+  if(/courier|rto|shadowfax|shipway|shipfaxy|delhivery|xpressbees|bluedart|undelivered/.test(raw)) return 'courier';
+  if(/system|auto|payment|timeout/.test(raw)) return 'system';
+  return 'customer';   // default — customer ne cancel/refuse kiya
+}
+
+function cancelStageLabel(o){
+  const c = o.cancellation || {};
+  const raw = String(c.stage || c.cancelled_at_stage || c.when || '').toLowerCase();
+  if(/doorstep|at_delivery|at-delivery|out_for_delivery|out-for-delivery|ofd|refus|delivery_attempt/.test(raw))
+    return 'At the time of delivery — the parcel was out for delivery';
+  if(/transit|in_transit|shipped|dispatch(ed)?_/.test(raw))
+    return 'While the parcel was in transit';
+  if(/before_dispatch|before-dispatch|pre_dispatch|processing|packed/.test(raw))
+    return 'Before the parcel was dispatched';
+  // koi stage nahi mila — AWB se andaza lagao
+  return o.awb ? 'After dispatch' : 'Before the parcel was dispatched';
+}
+
+function cancelMethodLabel(o){
+  const c = o.cancellation || {};
+  const raw = String(c.method || c.verified_by || c.mode || '').toLowerCase();
+  if(/otp/.test(raw))              return 'Confirmed with OTP at the doorstep';
+  if(/doorstep|refus|door/.test(raw)) return 'Refused at the doorstep by the customer';
+  if(/app|web|self|portal|online/.test(raw)) return 'Cancelled from the Track Order page';
+  if(/call|phone|support|ivr/.test(raw))     return 'Cancelled over a support call';
+  if(/whatsapp/.test(raw))         return 'Cancelled over WhatsApp';
+  return '';
+}
+
+function cancellationCardHTML(o){
+  const c = o.cancellation || {};
+  const actor = cancelActorOf(o);
+  const shipName = ((o.shipping_address && o.shipping_address.name) || '').trim();
+  const name = String(c.name || c.cancelled_by_name || c.customer_name || (actor === 'customer' ? shipName : '')).trim();
+
+  const heads = {
+    customer: 'Cancelled by the customer',
+    store:    'Cancelled by Smarticlab',
+    courier:  'Undelivered — parcel returned to us',
+    system:   'Order cancelled automatically'
+  };
+  const headline = c.headline || heads[actor];
+
+  const when = c.date || c.cancelled_at || c.cancelled_on || c.timestamp || null;
+  const whenTxt = when ? formatDateTime(when) : '';
+
+  // "Rohit Kumar ne yeh order cancel kiya, 18 Sep 2026, 4:12 PM"
+  let byLine;
+  if(actor === 'customer' && name){
+    byLine = `<b>${escapeHTML(name)}</b> cancelled this order${whenTxt ? ' on <b>' + escapeHTML(whenTxt) + '</b>' : ''}.`;
+  }else if(name){
+    byLine = `Cancelled by <b>${escapeHTML(name)}</b>${whenTxt ? ' on <b>' + escapeHTML(whenTxt) + '</b>' : ''}.`;
+  }else{
+    byLine = `This order was cancelled${whenTxt ? ' on <b>' + escapeHTML(whenTxt) + '</b>' : ''}.`;
+  }
+
+  const rows = [];
+  const stage = cancelStageLabel(o);
+  if(stage) rows.push(`<div class="cr"><span>Cancelled at</span><b>${escapeHTML(stage)}</b></div>`);
+
+  const method = cancelMethodLabel(o);
+  if(method) rows.push(`<div class="cr"><span>Confirmation</span><b>${escapeHTML(method)}</b></div>`);
+
+  const reason = c.reason || c.customer_reason || c.cancel_reason || '';
+  if(reason) rows.push(`<div class="cr"><span>Reason</span><b>${escapeHTML(reason)}</b></div>`);
+
+  const courier = c.courier || o.courier || '';
+  if(o.awb) rows.push(`<div class="cr"><span>AWB</span><b>${escapeHTML(o.awb)}${courier ? ' · ' + escapeHTML(courier) : ''}</b></div>`);
+
+  if(c.latest_scan) rows.push(`<div class="cr"><span>Return status</span><b>${escapeHTML(c.latest_scan)}</b></div>`);
+
+  // Courier (Shipfaxy / Shadowfax / Shipway) ka raw remark — jo bhi aaye, jaisa aaye
+  const remark = c.courier_remark || c.remark || c.shipway_remark || c.shadowfax_remark || c.tracking_remark || c.courier_status || '';
+  const remarkHTML = remark
+    ? `<div class="cancel-remark"><i>${escapeHTML(courier || 'Courier')} remark</i>${escapeHTML(remark)}</div>`
+    : '';
+
+  // Refund / RTO ki closing line
+  let foot = c.message || c.note || '';
+  if(!foot){
+    if(o.awb) foot = 'The parcel is on its way back to our warehouse. Live tracking is no longer available for this order.';
+    else foot = 'This order will not be shipped.';
+    if(String(c.payment_method || o.payment_method || '').toLowerCase().indexOf('cod') === -1){
+      foot += ' If you had paid online, the refund is processed to your original payment method within 5–7 working days.';
+    }
+  }
+
+  return `
+    <div class="cancel-card">
+      <div class="cc-head">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+        <div>${escapeHTML(headline)}</div>
+      </div>
+      <div class="cc-by">${byLine}</div>
+      ${rows.length ? `<div class="cancel-rows">${rows.join('')}</div>` : ''}
+      ${remarkHTML}
+      <div class="cancel-foot">${escapeHTML(foot)}</div>
+    </div>`;
+}
+
+/* ============================================================================
+   COURIER TIMELINE SE CANCEL / RTO DETECT
+   Woo ka status kabhi-kabhi 'processing' hi reh jaata hai jabki courier ke
+   scans me "Cancelled" / "Return to Seller initiated" aa chuka hota hai.
+   Us case me customer ko live forward tracking dikhana galat hai — yaha se
+   detect karke order ko cancelled maan lete hain.
+   ============================================================================ */
+const RE_CANCEL_EVENT = /cancel/i;
+const RE_RTO_EVENT    = /return to seller|returned to seller|\brts\b|\brto\b|return to origin|in transit for return|undelivered|refus|not accepted|delivery declined/i;
+const RE_OFD_EVENT    = /out for delivery|out_for_delivery|\bofd\b|assigned for delivery/i;
+const RE_DELIVERED_EV = /^\s*delivered/i;
+
+function detectCancelInTimeline(timeline){
+  if(!Array.isArray(timeline) || !timeline.length) return null;
+
+  const evs = timeline.map(e => ({
+    title: String((e && e.title) || ''),
+    time: (e && e.time) || null,
+    location: (e && e.location) || ''
+  }));
+  const ts = (e) => { const t = new Date(e.time).getTime(); return isNaN(t) ? 0 : t; };
+
+  const cancelEv = evs.find(e => RE_CANCEL_EVENT.test(e.title));
+  const rtoEv    = evs.find(e => RE_RTO_EVENT.test(e.title));
+  const anchor   = cancelEv || rtoEv;
+  if(!anchor) return null;
+
+  // Agar cancel ke BAAD delivered scan hai to yeh RTO nahi — chhod do
+  const deliveredEv = evs.find(e => RE_DELIVERED_EV.test(e.title));
+  if(deliveredEv && ts(deliveredEv) > ts(anchor)) return null;
+
+  const ofdEv = evs.find(e => RE_OFD_EVENT.test(e.title) && ts(e) <= ts(anchor));
+
+  return {
+    date: anchor.time,
+    stage: ofdEv ? 'out_for_delivery' : 'in_transit',
+    remark: [anchor.title, anchor.location].filter(Boolean).join(' · '),
+    latest: evs[0] || null,
+    ofd: ofdEv || null
+  };
+}
+
+/* Login/lookup ke turant baad hi courier scans check kar lete hain, taaki order page
+   par pehli baar me hi sahi status dikhe — customer ko "View Live Tracking" click
+   karke pata na chale ki order to cancel ho chuka hai. */
+async function prefetchTrackingStatus(){
+  const o = state.order;
+  if(!o || CONFIG.demoMode) return;
+  if(o.status === 'cancelled' || o.cancellation) return;          // pehle se pata hai
+  if(o.exchange_delivery_tracking || o.return_tracking) return;   // inka apna flow hai
+  if(!o.awb && !o.live_status_label) return;                      // abhi dispatch hi nahi hua
+
+  try{
+    const url = `${CONFIG.trackOrderUrl}?mode=order&value=${encodeURIComponent(o.number)}&contact=${encodeURIComponent(state.identifier)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if(!data || data.verified === false || data.status === 'verification_failed') return;
+
+    state.trackingCache = { number: o.number, data };   // modal turant khule, dobara fetch na ho
+    const det = detectCancelInTimeline(Array.isArray(data.timeline) ? data.timeline : []);
+    if(det) applyDetectedCancellation(det, data);
+  }catch(e){ /* tracking nahi mili to order normal hi dikhega */ }
+}
+
+function applyDetectedCancellation(det, t){
+  if(!state.order || !det) return;
+  const shipName = ((state.order.shipping_address && state.order.shipping_address.name) || '').trim();
+  const latestTxt = det.latest
+    ? [det.latest.title, formatDateTime(det.latest.time), det.latest.location].filter(Boolean).join(' · ')
+    : '';
+
+  state.order.status = 'cancelled';
+  state.order.can_cancel_now = false;
+  state.order.live_status_label = null;
+  state.order.cancellation = Object.assign({
+    by: 'customer',
+    name: shipName,
+    date: det.date,
+    stage: det.stage,
+    method: det.stage === 'out_for_delivery' ? 'doorstep' : '',
+    courier: (t && t.courier) || state.order.courier || '',
+    courier_remark: det.remark,
+    latest_scan: latestTxt
+  }, state.order.cancellation || {});
+
+  saveSession();
+  renderOrderDetail(state.order);
+}
+
+/* ============================================================================
+   STEP 2 — RENDER ORDER DETAIL (per-item Return / Exchange)
+   ============================================================================ */
+function renderOrderDetail(o){
+  saveSession();   // har render par latest order cache ho jaye
+  const statusMap = {
+    delivered: { label: "Delivered", cls: "delivered" },
+    completed: { label: "Delivered", cls: "delivered" },
+    "out-for-delivery": { label: "Out for Delivery", cls: "transit" },
+    shipped: { label: "In Transit", cls: "transit" },
+    processing: { label: "Processing", cls: "processing" },
+    cancelled: { label: "Cancelled", cls: "cancelled" }
+  };
+  const st = statusMap[o.status] || { label: o.status || "Processing", cls: "processing" };
+  const isDelivered = o.status === 'delivered' || o.status === 'completed';
+  const isCancelled = o.status === 'cancelled' || !!(o.cancellation && (o.cancellation.is_cancelled || o.cancellation.cancelled));
+
+  // Agar exchange ka replacement bhej diya gaya hai, ya return pickup chal raha hai, to top badge
+  // ab USKI live stage dikhayega — purani (original order ki) "Delivered" badge ab misleading ho jaati
+  // hai jab tak process complete na ho jaaye.
+  let badgeLabel = st.label;
+  let badgeCls = st.cls;
+  if(isCancelled){
+    // Cancelled order par courier ka live status badge NAHI — warna customer confuse hota hai
+    badgeLabel = "Cancelled";
+    badgeCls = "cancelled";
+  }else if(o.exchange_delivery_tracking){
+    const ex = o.exchange_delivery_tracking;
+    const exStageLabels = ["Exchange: Placed", "Exchange: Picked Up", "Exchange: In Transit", "Exchange: Out for Delivery", "Exchange: Delivered"];
+    const exStage = Math.min(Math.max(ex.progress_stage || 1, 1), exStageLabels.length);
+    badgeLabel = exStageLabels[exStage - 1];
+    badgeCls = exStage >= 5 ? 'delivered' : 'transit';
+  }else if(o.return_tracking){
+    const rt = o.return_tracking;
+    const rtStageLabels = [`${rt.type || 'Return'}: Pickup Scheduled`, `${rt.type || 'Return'}: Out for Pickup`, `${rt.type || 'Return'}: Picked Up`, `${rt.type || 'Return'}: In Transit`, `${rt.type || 'Return'}: Received at Office`];
+    const rtStage = rt.progress_stage === -1 ? rtStageLabels.length : Math.min(Math.max(rt.progress_stage || 1, 1), rtStageLabels.length);
+    badgeLabel = rtStageLabels[rtStage - 1];
+    badgeCls = rtStage >= rtStageLabels.length ? 'delivered' : 'transit';
+  }else if(o.live_status_label){
+    // Forward delivery abhi chal rahi hai — generic "Processing" ki jagah Shadowfax/Delhivery
+    // ka real-time specific status dikhao (jaise "Out For Pickup", "In Transit").
+    badgeLabel = o.live_status_label;
+    badgeCls = 'transit';
+  }
+
+  let deliveredLineHTML = '';
+  if(isDelivered && o.delivered_date){
+    deliveredLineHTML = `<div class="delivered-line">Delivered on ${formatDate(o.delivered_date)}</div>`;
+  }
+
+  let trackButtonHTML;
+  if(isCancelled){
+    // SABSE PEHLE cancelled check — AWB hone par bhi live tracking ab nahi dikhegi
+    trackButtonHTML = cancellationCardHTML(o);
+  }else if(o.exchange_delivery_tracking || o.return_tracking){
+    trackButtonHTML = `<button class="btn-secondary" style="margin-top:14px" onclick="trackOrder('${o.number}')">${o.exchange_delivery_tracking ? '📦 Track Exchange Delivery' : '📦 Track ' + escapeHTML(o.return_tracking.type || 'Return') + ' Pickup'}</button>`;
+  }else if(o.awb){
+    trackButtonHTML = `<button class="btn-secondary" style="margin-top:14px" onclick="trackOrder('${o.number}')">View Live Tracking</button>`;
+  }else{
+    // Abhi tak koi dispatch/AWB nahi bana — tracking button dikhane ka koi matlab nahi jab tak
+    // kuch actually track karne layak na ho.
+    trackButtonHTML = `<div class="processing-note">Your order is being processed. Live tracking will appear here once it's dispatched.</div>`;
+  }
+
+  // Customer khud order cancel kar sake — sirf tab jab admin ne yeh feature enable kiya ho
+  // (window abhi khula ho) aur order abhi cancel-able state mein ho.
+  const cancelOrderHTML = (o.can_cancel_now && !isCancelled)
+    ? `<button class="btn-secondary cancel-order-btn" style="margin-top:10px" onclick="cancelMyOrder('${o.number}', ${o.id})">Cancel This Order</button>`
+    : '';
+
+  // Pricing breakdown — MRP, discount, coupon, free delivery, total savings sab clearly dikhao
+  const pr = o.pricing || {};
+  const hasSavings = (pr.total_savings || 0) > 0;
+  let pricingHTML = `<div class="total-line"><span>Order total</span><b>₹${o.total}</b></div>`;
+  if(pr.mrp_total){
+    const rows = [];
+    if(pr.mrp_total > pr.order_total + (pr.coupon_discount || 0)){
+      rows.push(`<div class="price-row"><span>Item MRP</span><span class="strike">₹${pr.mrp_total.toFixed(0)}</span></div>`);
+    }
+    if(pr.coupon_discount > 0){
+      rows.push(`<div class="price-row"><span>Coupon Discount${pr.coupon_codes && pr.coupon_codes.length ? ' (' + escapeHTML(pr.coupon_codes.join(', ')) + ')' : ''}</span><span class="off">− ₹${pr.coupon_discount.toFixed(0)}</span></div>`);
+    }
+    rows.push(`<div class="price-row"><span>Delivery Fee</span><span class="${pr.free_shipping ? 'free-tag' : ''}">${pr.free_shipping ? 'FREE' : '₹' + pr.shipping_total.toFixed(0)}</span></div>`);
+    rows.push(`<div class="price-row total"><span>Order Total</span><span>₹${pr.order_total.toFixed(0)}</span></div>`);
+
+    pricingHTML = `
+      <div class="price-breakdown">
+        ${rows.join('')}
+      </div>
+      ${hasSavings ? `<div class="savings-banner">🎉 You saved ₹${pr.total_savings.toFixed(0)} on this order!</div>` : ''}`;
+  }
+
+  const headerHTML = `
+    <div class="order-header">
+      <div class="order-header-top">
+        <div>
+          <div class="order-id">Order #${o.number}</div>
+          <div class="order-date">Placed on ${formatDate(o.date_created)}</div>
+        </div>
+        <div class="badge ${badgeCls}">${badgeLabel}</div>
+      </div>
+      ${deliveredLineHTML}
+      ${pricingHTML}
+      ${trackButtonHTML}
+      ${cancelOrderHTML}
+    </div>`;
+
+  const itemsHTML = (o.line_items || []).map((li, idx) => itemCardHTML(li, idx, o, isDelivered)).join('');
+
+  document.getElementById('orderContainer').innerHTML = `
+    ${headerHTML}
+    <div class="list-title">${isCancelled ? 'Order summary' : 'Items in this order'}</div>
+    ${itemsHTML}`;
+
+  // Reviews alag se load hote hain (product ke hisaab se), taaki order load fast rahe
+  if(isDelivered){
+    (o.line_items || []).forEach((li, idx) => { if(li.product_id) loadReviewsForItem(idx, li.product_id); });
+  }
+}
+
+function bankFormHTML(idx, requestId, existing){
+  const method = (existing && existing.method) || 'upi';
+  const isUpi = method === 'upi';
+  return `
+    <div id="bankForm-${idx}" style="display:none; margin-top:10px;">
+      <div class="method-toggle">
+        <button type="button" class="method-btn ${isUpi ? 'active' : ''}" id="methodBtnUpi-${idx}" onclick="selectBankMethod(${idx},'upi')">💳 UPI <span class="recommended-tag">Faster</span></button>
+        <button type="button" class="method-btn ${!isUpi ? 'active' : ''}" id="methodBtnBank-${idx}" onclick="selectBankMethod(${idx},'bank')">🏦 Bank Account</button>
+      </div>
+      <input type="hidden" id="bankMethod-${idx}" value="${method}">
+      <div id="upiFields-${idx}" style="display:${isUpi ? 'block' : 'none'}; margin-top:10px;">
+        <div class="field"><input type="text" id="bankUpi-${idx}" placeholder="UPI ID (e.g. name@bank)" value="${escapeHTML((existing && existing.upi_id) || '')}"></div>
+      </div>
+      <div id="bankFields-${idx}" style="display:${isUpi ? 'none' : 'block'}; margin-top:10px;">
+        <div class="field"><input type="text" id="bankName-${idx}" placeholder="Account Holder Name" value="${escapeHTML((existing && existing.bank_account_name) || '')}"></div>
+        <div class="field" style="margin-top:8px;"><input type="text" id="bankAcc-${idx}" placeholder="Account Number" value="${escapeHTML((existing && existing.bank_account_number) || '')}"></div>
+        <div class="field" style="margin-top:8px;"><input type="text" id="bankIfsc-${idx}" placeholder="IFSC Code" value="${escapeHTML((existing && existing.bank_ifsc) || '')}"></div>
+      </div>
+      <button class="btn-primary" style="width:100%; margin-top:10px;" id="bankSubmitBtn-${idx}" onclick="submitBankDetails(${idx}, '${requestId}')">${existing ? 'Save Changes' : 'Submit Bank Details'}</button>
+    </div>`;
+}
+
+function itemCardHTML(li, idx, order, isDelivered){
+  const thumb = li.image
+    ? `<img class="item-thumb" src="${li.image}" alt="${escapeHTML(li.name)}" loading="lazy" onerror="this.outerHTML=fallbackThumbHTML();">`
+    : fallbackThumbHTML();
+
+  let actionsHTML = '';
+  let windowHTML = '';
+  let requestStatusHTML = '';
+
+  const reqKind = (li.request_type || 'Return').toLowerCase();
+  const reqStatusLower = (li.request_status || '').toLowerCase();
+  const isBlockingRequest = reqStatusLower === 'pending' || reqStatusLower === 'approved';
+
+  if(isBlockingRequest){
+    // Is item par pehle se hi ek return/exchange request pending/approved hai —
+    // ab button ki jagah hamesha status message hi dikhega.
+    const kind = reqKind;
+    const statusLower = reqStatusLower;
+    const noteHTML = li.request_note ? `<div style="margin-top:4px; font-weight:400;">Reason: ${escapeHTML(li.request_note)}</div>` : '';
+    if(statusLower === 'pending'){
+      const refundNote = kind === 'return' ? ' Refund will be processed after the parcel reaches our office and passes quality check.' : '';
+      requestStatusHTML = `<div class="request-status pending">🕓 Your ${kind} request has been submitted and is under review.${refundNote}</div>`;
+    }else if(statusLower === 'approved'){
+      const stage = li.customer_stage || 'approved';
+      const rt = (order.return_tracking && order.return_tracking.awb && li.request_awb && order.return_tracking.awb === li.request_awb) ? order.return_tracking : null;
+      const ex = order.exchange_delivery_tracking;
+      let renderStatusDone = false;
+
+      let awbHTML = '';
+
+      if(ex && kind === 'exchange'){
+        const exStage = Math.min(Math.max(ex.progress_stage || 1, 1), TRACK_STAGES.length);
+
+        if(exStage >= TRACK_STAGES.length){
+          // Replacement deliver ho chuka — ab tracking dikhane ki zaroorat nahi, bas confirmation.
+          requestStatusHTML = `<div class="request-status approved">
+            ✅ Your replacement has been delivered! Hope you love the new fit.
+          </div>`;
+        }else{
+          // Abhi raste mein hai — sirf simple step-tracker dikhao (poori event-timeline "Track Exchange
+          // Delivery" button ke modal mein already available hai, yahan dobara dikhana clutter tha).
+          const exStepsHTML = TRACK_STAGES.map((label, i) => {
+            const n = i + 1;
+            const cls = n < exStage ? 'done' : (n === exStage ? 'current' : '');
+            return `
+              <div class="track-step ${cls}">
+                <div class="line"></div>
+                <div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+                <div class="lbl">${label}</div>
+              </div>`;
+          }).join('');
+          requestStatusHTML = `<div class="request-status approved">
+            🎉 Quality check passed — your replacement is on the way!
+            <div style="margin-top:8px; font-weight:600;">📦 AWB: ${escapeHTML(ex.awb)}${ex.courier ? ' · ' + escapeHTML(ex.courier) : ''} — ${escapeHTML(ex.status || '')}</div>
+            <div class="inline-track">
+              <div class="track-steps">${exStepsHTML}</div>
+            </div>
+          </div>`;
+        }
+        renderStatusDone = true;
+      }
+
+      if(!renderStatusDone){
+        if(stage === 'qc_pending'){
+          requestStatusHTML = `<div class="request-status approved">
+            ✅ Order Received at our office<br>
+            🔍 Sent for Quality Check — we'll update you once it's done.
+          </div>`;
+        }else if(stage === 'qc_failed'){
+          requestStatusHTML = `<div class="request-status approved">
+            ⚠️ Order Received — our quality check found an issue with the returned item. Our team will contact you shortly.
+          </div>`;
+        }else if(stage === 'picked_up'){
+          requestStatusHTML = `<div class="request-status approved">
+            📦 Your ${kind} pickup has been picked up and is on its way to our office.
+          </div>`;
+        }else{
+          // stage === 'approved' — pickup scheduled, abhi tak pick nahi hua
+          if(li.request_awb){
+            awbHTML = `<div style="margin-top:4px; font-weight:600;">📦 Pickup AWB: ${escapeHTML(li.request_awb)}${li.request_awb_courier ? ' · ' + escapeHTML(li.request_awb_courier) : ''}</div>`;
+          }else{
+            awbHTML = `<div style="margin-top:4px; font-weight:400;">Pickup AWB will appear here once assigned.</div>`;
+          }
+          requestStatusHTML = `<div class="request-status approved">✅ Your ${kind} request has been approved. Pickup will happen within 12–24 hours.${awbHTML}</div>`;
+        }
+      }
+
+      // RETURN: bank details refund flow — sirf Return type ke liye, Exchange ke liye nahi
+      let refundHTML = '';
+      if(kind === 'return'){
+        const refundMethodLabel = { upi: 'UPI', bank_transfer: 'Bank Transfer', original_payment_method: 'Original Payment Method' }[li.request_refund_method] || 'your provided details';
+
+        if(li.request_refund_transaction_id){
+          refundHTML = `<div class="refund-box refund-done">✅ Refund Successful — via ${escapeHTML(refundMethodLabel)}<br>Transaction ID: ${escapeHTML(li.request_refund_transaction_id)}</div>`;
+        }else{
+          const processNoteHTML = `<div style="margin-bottom:8px;">🏦 Once we receive the parcel, our team will run a quality check — your refund is processed immediately after it passes. There may be a short wait until the parcel arrives at our office.</div>`;
+
+          if(li.request_bank_submitted && li.request_bank_details){
+            const bd = li.request_bank_details;
+            const submittedLineHTML = bd.method === 'upi'
+              ? `<div><b>UPI ID:</b> ${escapeHTML(bd.upi_id)}</div>`
+              : `<div><b>${escapeHTML(bd.bank_account_name)}</b></div><div>A/C: ${escapeHTML(bd.bank_account_number)} · IFSC: ${escapeHTML(bd.bank_ifsc)}</div>`;
+
+            refundHTML = `
+              <div class="refund-box">
+                ${processNoteHTML}
+                <div class="bank-details-view">
+                  <div class="bank-details-lbl">Your submitted details</div>
+                  ${submittedLineHTML}
+                  <button class="pill-btn" style="width:100%; margin-top:8px;" onclick="toggleBankForm(${idx})">✏️ Edit Details</button>
+                </div>
+                ${bankFormHTML(idx, li.request_id, bd)}
+              </div>`;
+          }else{
+            refundHTML = `
+              <div class="refund-box">
+                ${processNoteHTML}
+                <button class="pill-btn" style="width:100%" onclick="toggleBankForm(${idx})">Add Bank Details</button>
+                ${bankFormHTML(idx, li.request_id, null)}
+              </div>`;
+          }
+        }
+      }
+
+      requestStatusHTML = `${requestStatusHTML}${refundHTML}`;
+    }
+  }
+
+  // Disapproved (ya koi request hi nahi) — agar window abhi bhi open hai to naya Return/Exchange
+  // request submit karne ka option dikhao. Disapproved ka case "hamesha blocked" nahi rehta —
+  // customer sahi reason/details ke saath dobara try kar sakta hai.
+  let disapprovedNoteHTML = '';
+  if(reqStatusLower === 'disapproved'){
+    const prevNoteHTML = li.request_note ? ` Reason: ${escapeHTML(li.request_note)}` : '';
+    disapprovedNoteHTML = `<div class="request-status disapproved">✕ Your previous ${reqKind} request was not approved.${prevNoteHTML} You can submit a new request below if needed.</div>`;
+  }
+
+  if(!isBlockingRequest && isDelivered && order.delivered_date){
+    const now = Date.now();
+    const deliveredMs = new Date(order.delivered_date).getTime();
+    const returnUntilMs = order.return_until ? new Date(order.return_until).getTime() : (deliveredMs + CONFIG.returnWindowDays*86400000);
+    const exchangeUntilMs = order.exchange_until ? new Date(order.exchange_until).getTime() : (deliveredMs + CONFIG.exchangeWindowDays*86400000);
+
+    const returnOpen = now <= returnUntilMs;
+    const exchangeOpen = now <= exchangeUntilMs;
+    const returnDaysLeft = Math.max(Math.ceil((returnUntilMs - now) / 86400000), 0);
+    const exchangeDaysLeft = Math.max(Math.ceil((exchangeUntilMs - now) / 86400000), 0);
+
+    if(exchangeOpen || returnOpen){
+      if(exchangeOpen) actionsHTML += `<button class="pill-btn exchange" onclick="openRequest(${idx}, 'Exchange')">Exchange</button>`;
+      if(returnOpen) actionsHTML += `<button class="pill-btn return" onclick="openRequest(${idx}, 'Return')">Return</button>`;
+
+      const parts = [];
+      if(returnOpen) parts.push(`Return: ${returnDaysLeft} day${returnDaysLeft===1?'':'s'} left`);
+      if(exchangeOpen) parts.push(`Exchange: ${exchangeDaysLeft} day${exchangeDaysLeft===1?'':'s'} left`);
+      windowHTML = `
+        <div class="window-note">${parts.join(' &nbsp;·&nbsp; ')}</div>
+        <label class="batch-select-lbl">
+          <input type="checkbox" class="batch-checkbox" id="batchCb-${idx}" onchange="toggleBatchSelect(${idx}, this.checked)">
+          Select to process with other items together
+        </label>`;
+    }else{
+      windowHTML = `<div class="window-closed">Return/Exchange window has closed for this item.</div>`;
+    }
+  }
+
+  // Reviews sirf delivered items par dikhte hain, jab tak koi active return/exchange request na ho
+  const exchangeFullyDelivered = order.exchange_delivery_tracking
+    && (li.request_type || '').toLowerCase() === 'exchange'
+    && (order.exchange_delivery_tracking.progress_stage || 1) >= TRACK_STAGES.length;
+  const hasActiveRequest = li.request_status
+    && ['pending', 'approved'].includes((li.request_status || '').toLowerCase())
+    && !exchangeFullyDelivered;
+  const reviewsHTML = (isDelivered && !hasActiveRequest) ? `
+      <div id="review-block-${idx}">
+        <div class="review-summary" id="review-summary-${idx}">
+          <span style="font-size:12px; color:var(--muted);">Loading reviews...</span>
+        </div>
+        <div class="review-cta-row">
+          <button class="pill-btn review" style="width:100%" onclick="openReviewModal(${idx})">⭐ Rate &amp; Review</button>
+        </div>
+        <div class="review-list" id="review-list-${idx}" style="display:none"></div>
+      </div>` : '';
+
+  return `
+    <div class="item-card">
+      <div class="item-row">
+        ${thumb}
+        <div class="item-info">
+          <div class="item-name">${escapeHTML(li.name || 'Product')}</div>
+          <div class="item-meta">${li.quantity > 1 ? 'Qty ' + li.quantity : 'Qty 1'}</div>
+        </div>
+        <div class="item-price">
+          ${li.regular_price ? `<div class="item-mrp">₹${li.regular_price}</div>` : ''}
+          <div class="item-paid">${li.price ? '₹' + li.price : ''}</div>
+          ${li.discount_percent > 0 ? `<div class="item-off">${li.discount_percent}% OFF</div>` : ''}
+        </div>
+      </div>
+      ${disapprovedNoteHTML}
+      ${actionsHTML ? `<div class="item-actions">${actionsHTML}</div>` : ''}
+      ${windowHTML}
+      ${requestStatusHTML}
+      ${reviewsHTML}
+    </div>`;
+}
+
+function fallbackThumbHTML(){
+  return `<div class="item-thumb fallback"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M20 7L12 3 4 7m16 0v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4"/></svg></div>`;
+}
+
+function escapeHTML(str){
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+function formatDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+}
+
+function formatDateTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d)) return '';
+  return d.toLocaleString('en-IN', { day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+}
+
+const TRACK_STAGES = ["Placed", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
+const RETURN_TRACK_STAGES = ["Pickup Scheduled", "Out for Pickup", "Picked Up", "In Transit", "Received at Office"];
+
+async function trackOrder(orderNumber){
+  const alreadyCancelled = state.order && (state.order.status === 'cancelled' || !!state.order.cancellation);
+  if(alreadyCancelled && !state.order.exchange_delivery_tracking && !state.order.return_tracking){
+    toast('This order was cancelled — live tracking is not available.');
+    return;
+  }
+  document.getElementById('trackingSub').textContent = `Order #${orderNumber}`;
+  document.getElementById('trackingModal').classList.add('active');
+
+  // Exchange ka replacement ban chuka ho to USKI (forward delivery) tracking priority se dikhao —
+  // reverse-pickup tracking sirf tab tak relevant hai jab tak replacement ban na jaaye.
+  if(state.order && state.order.exchange_delivery_tracking){
+    renderExchangeDeliveryTracking(state.order.exchange_delivery_tracking);
+    return;
+  }
+
+  // Agar is order ka koi return/exchange pickup generate ho chuka hai, to live tracking
+  // ab delivery status ki jagah PICKUP status dikhayega — alag se dobara fetch karne ki
+  // zaroorat nahi, order load hote waqt hi yeh data mil chuka hota hai.
+  if(state.order && state.order.return_tracking){
+    renderReturnTracking(state.order.return_tracking);
+    return;
+  }
+
+  // Lookup ke waqt hi data aa chuka hai to dobara fetch mat karo
+  if(state.trackingCache && state.trackingCache.number === orderNumber){
+    renderTracking(state.trackingCache.data);
+    return;
+  }
+
+  document.getElementById('trackingBody').innerHTML = `<div class="loader"><div class="spinner"></div></div>`;
+
+  try{
+    const url = `${CONFIG.trackOrderUrl}?mode=order&value=${encodeURIComponent(orderNumber)}&contact=${encodeURIComponent(state.identifier)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if(data.verified === false || data.status === 'verification_failed'){
+      document.getElementById('trackingBody').innerHTML =
+        `<div class="track-error">${escapeHTML(data.message || "Couldn't verify this order for tracking.")}</div>`;
+      return;
+    }
+
+    state.trackingCache = { number: orderNumber, data };
+    renderTracking(data);
+  }catch(err){
+    document.getElementById('trackingBody').innerHTML =
+      `<div class="track-error">Live tracking is unavailable right now. Please try again in a bit.</div>`;
+  }
+}
+
+function renderExchangeDeliveryTracking(ex){
+  const stage = Math.min(Math.max(ex.progress_stage || 1, 1), TRACK_STAGES.length);
+  const stepsHTML = TRACK_STAGES.map((label, i) => {
+    const n = i + 1;
+    const cls = n < stage ? 'done' : (n === stage ? 'current' : '');
+    return `
+      <div class="track-step ${cls}">
+        <div class="line"></div>
+        <div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div class="lbl">${label}</div>
+      </div>`;
+  }).join('');
+
+  const timeline = Array.isArray(ex.timeline) ? ex.timeline : [];
+  const timelineHTML = timeline.length
+    ? `<div class="track-timeline">${timeline.map(ev => `
+        <div class="track-event">
+          <div class="t-title">${escapeHTML(ev.title || 'Update')}</div>
+          <div class="t-meta">${[formatDateTime(ev.time), ev.location].filter(Boolean).map(escapeHTML).join(' · ')}</div>
+        </div>`).join('')}</div>`
+    : '';
+
+  document.getElementById('trackingBody').innerHTML = `
+    <div class="track-note">🎉 Your replacement for <b>${escapeHTML(ex.product_name || 'this item')}</b> is on its way.</div>
+    <div class="track-courier">
+      ${ex.courier ? `<b>${escapeHTML(ex.courier)}</b> · ` : ''}${escapeHTML(ex.status || 'Shipped')}
+      ${ex.awb ? ` · AWB: ${escapeHTML(ex.awb)}` : ''}
+    </div>
+    <div class="track-steps">${stepsHTML}</div>
+    ${timelineHTML}`;
+}
+
+function renderReturnTracking(rt){
+  const isIssue = rt.progress_stage === -1;
+  const stage = isIssue ? RETURN_TRACK_STAGES.length : Math.min(Math.max(rt.progress_stage || 1, 1), RETURN_TRACK_STAGES.length);
+
+  const stepsHTML = RETURN_TRACK_STAGES.map((label, i) => {
+    const n = i + 1;
+    const cls = isIssue ? '' : (n < stage ? 'done' : (n === stage ? 'current' : ''));
+    return `
+      <div class="track-step ${cls}">
+        <div class="line"></div>
+        <div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div class="lbl">${label}</div>
+      </div>`;
+  }).join('');
+
+  const timeline = Array.isArray(rt.timeline) ? rt.timeline : [];
+  const timelineHTML = timeline.length
+    ? `<div class="track-timeline">${timeline.map(ev => `
+        <div class="track-event">
+          <div class="t-title">${escapeHTML(ev.title || 'Update')}</div>
+          <div class="t-meta">${[formatDateTime(ev.time), ev.location].filter(Boolean).map(escapeHTML).join(' · ')}</div>
+        </div>`).join('')}</div>`
+    : `<div class="track-error">Pickup abhi schedule hua hai — courier ne aana shuru nahi kiya.</div>`;
+
+  const partnerHTML = rt.delivery_partner && (rt.delivery_partner.name || rt.delivery_partner.phone)
+    ? `<div class="track-partner">
+         <b>Delivery Partner:</b> ${escapeHTML(rt.delivery_partner.name || rt.courier || 'Assigned')}${rt.delivery_partner.phone ? ' · ' + escapeHTML(rt.delivery_partner.phone) : ''}
+       </div>`
+    : '';
+
+  const issueHTML = isIssue
+    ? `<div class="track-error">⚠️ ${escapeHTML(rt.status || 'Pickup needs attention')} — please contact support.</div>`
+    : '';
+
+  document.getElementById('trackingBody').innerHTML = `
+    <div class="track-note">📦 This is your <b>${escapeHTML(rt.type || 'Return')}</b> pickup for <b>${escapeHTML(rt.product_name || 'this item')}</b>.</div>
+    <div class="track-courier">
+      ${rt.courier ? `<b>${escapeHTML(rt.courier)}</b> · ` : ''}${escapeHTML(rt.status || 'Pickup Scheduled')}
+      ${rt.awb ? ` · AWB: ${escapeHTML(rt.awb)}` : ''}
+    </div>
+    ${partnerHTML}
+    ${issueHTML}
+    <div class="track-steps">${stepsHTML}</div>
+    ${timelineHTML}`;
+}
+
+function renderTracking(t){
+  const timelineRaw = Array.isArray(t.timeline) ? t.timeline : [];
+  const timelineOnlyHTML = timelineRaw.length
+    ? `<div class="track-timeline">${timelineRaw.map(ev => `
+        <div class="track-event">
+          <div class="t-title">${escapeHTML(ev.title || 'Update')}</div>
+          <div class="t-meta">${[formatDateTime(ev.time), ev.location].filter(Boolean).map(escapeHTML).join(' · ')}</div>
+        </div>`).join('')}</div>`
+    : '';
+
+  // Courier scans me cancel/RTO mil gaya -> forward stepper bilkul mat dikhao
+  const det = detectCancelInTimeline(timelineRaw);
+  if(det){
+    applyDetectedCancellation(det, t);
+    document.getElementById('trackingBody').innerHTML = `
+      ${cancellationCardHTML(state.order)}
+      <div class="list-title" style="margin:18px 0 10px">Courier scans</div>
+      ${timelineOnlyHTML}`;
+    return;
+  }
+
+  const stage = Math.min(Math.max(t.progress_stage || 1, 1), 5);
+
+  const stepsHTML = TRACK_STAGES.map((label, i) => {
+    const n = i + 1;
+    const cls = n < stage ? 'done' : (n === stage ? 'current' : '');
+    return `
+      <div class="track-step ${cls}">
+        <div class="line"></div>
+        <div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div class="lbl">${label}</div>
+      </div>`;
+  }).join('');
+
+  const timeline = Array.isArray(t.timeline) ? t.timeline : [];
+  const timelineHTML = timeline.length
+    ? `<div class="track-timeline">${timeline.map(ev => `
+        <div class="track-event">
+          <div class="t-title">${escapeHTML(ev.title || 'Update')}</div>
+          <div class="t-meta">${[formatDateTime(ev.time), ev.location].filter(Boolean).map(escapeHTML).join(' · ')}</div>
+        </div>`).join('')}</div>`
+    : `<div class="track-error">No tracking scans yet — courier hasn't picked up the shipment.</div>`;
+
+  document.getElementById('trackingBody').innerHTML = `
+    <div class="track-courier">
+      ${t.courier ? `<b>${escapeHTML(t.courier)}</b> · ` : ''}${escapeHTML(t.status || t.badge || 'Tracking Active')}
+      ${t.current_location ? ` · ${escapeHTML(t.current_location)}` : ''}
+    </div>
+    <div class="track-steps">${stepsHTML}</div>
+    ${timelineHTML}`;
+}
+
+function closeTrackingModal(){
+  document.getElementById('trackingModal').classList.remove('active');
+}
+
+/* ============================================================================
+   RETURN — Bank details for refund
+   ============================================================================ */
+/* ============================================================================
+   CANCEL ORDER — customer khud order cancel kar sake (admin-configured window ke andar)
+   ============================================================================ */
+function cancelMyOrder(orderNumber, orderId){
+  state.cancelTarget = { orderNumber, orderId };
+  state.cancelReason = null;
+
+  document.getElementById('cancelReasonGrid').innerHTML = CANCEL_REASONS.map(r => `
+    <div class="reason-chip" data-cancel-reason="${r.label}" onclick="selectCancelReason('${r.label}')">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${r.icon}</svg></span>
+      <span>${r.label}</span>
+      <span class="dot"></span>
+    </div>`).join('');
+
+  const box = document.getElementById('cancelReasonBox');
+  box.value = '';
+  box.classList.remove('active');
+  document.getElementById('cancelCharCount').style.display = 'none';
+  document.getElementById('confirmCancelOrderBtn').disabled = true;
+
+  document.getElementById('cancelOrderModal').classList.add('active');
+}
+
+function closeCancelOrderModal(){
+  document.getElementById('cancelOrderModal').classList.remove('active');
+}
+
+function selectCancelReason(reason){
+  state.cancelReason = reason;
+  document.querySelectorAll('#cancelReasonGrid .reason-chip').forEach(el => {
+    el.classList.toggle('selected', el.dataset.cancelReason === reason);
+  });
+  const box = document.getElementById('cancelReasonBox');
+  box.classList.add('active');
+  document.getElementById('cancelCharCount').style.display = 'block';
+  box.focus();
+  validateCancelReasonStep();
+}
+
+document.getElementById('cancelReasonBox').addEventListener('input', (e) => {
+  document.getElementById('cancelCharCount').textContent = `${e.target.value.length} / 300`;
+  validateCancelReasonStep();
+});
+
+function validateCancelReasonStep(){
+  const box = document.getElementById('cancelReasonBox');
+  const ok = state.cancelReason && wordCount(box.value) >= 3;
+  document.getElementById('confirmCancelOrderBtn').disabled = !ok;
+}
+
+async function submitCancelOrder(){
+  const { orderNumber, orderId } = state.cancelTarget;
+  const customReason = document.getElementById('cancelReasonBox').value.trim();
+  const btn = document.getElementById('confirmCancelOrderBtn');
+  btn.disabled = true;
+  btn.textContent = 'Cancelling...';
+
+  try{
+    const res = await fetch(CONFIG.cancelOrderUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order_id: orderId,
+        order_number: orderNumber,
+        identifier: state.identifier,
+        reason: state.cancelReason,
+        custom_reason: customReason
+      })
+    });
+    const data = await res.json();
+    if(!data.success){
+      toast(data.message || "Couldn't cancel your order.");
+      btn.disabled = false;
+      btn.textContent = 'Yes, Cancel Order';
+      return;
+    }
+
+    state.order.status = 'cancelled';
+    state.order.can_cancel_now = false;
+    state.order.cancellation = {
+      by: 'customer',
+      name: (state.order.shipping_address && state.order.shipping_address.name) || '',
+      date: new Date().toISOString(),
+      method: 'app',
+      stage: state.order.awb ? 'in_transit' : 'before_dispatch',
+      reason: state.cancelReason || '',
+      courier_remark: (data && data.courier_remark) || ''
+    };
+    closeCancelOrderModal();
+    renderOrderDetail(state.order);
+    toast('Order cancelled ✓');
+  }catch(err){
+    toast("Couldn't cancel your order — please try again.");
+    btn.disabled = false;
+    btn.textContent = 'Yes, Cancel Order';
+  }
+}
+
+function toggleBankForm(idx){
+  const form = document.getElementById(`bankForm-${idx}`);
+  if(form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function selectBankMethod(idx, method){
+  document.getElementById(`bankMethod-${idx}`).value = method;
+  document.getElementById(`methodBtnUpi-${idx}`).classList.toggle('active', method === 'upi');
+  document.getElementById(`methodBtnBank-${idx}`).classList.toggle('active', method === 'bank');
+  document.getElementById(`upiFields-${idx}`).style.display = method === 'upi' ? 'block' : 'none';
+  document.getElementById(`bankFields-${idx}`).style.display = method === 'bank' ? 'block' : 'none';
+}
+
+async function submitBankDetails(idx, requestId){
+  const method = document.getElementById(`bankMethod-${idx}`).value;
+  const payload = { id: requestId, identifier: state.identifier, method };
+
+  if(method === 'upi'){
+    const upi = document.getElementById(`bankUpi-${idx}`).value.trim();
+    if(!upi){
+      toast('UPI ID daalo.');
+      return;
+    }
+    payload.upi_id = upi;
+  }else{
+    const name = document.getElementById(`bankName-${idx}`).value.trim();
+    const acc = document.getElementById(`bankAcc-${idx}`).value.trim();
+    const ifsc = document.getElementById(`bankIfsc-${idx}`).value.trim();
+    if(!name || !acc || !ifsc){
+      toast('Account holder name, account number aur IFSC zaroori hai.');
+      return;
+    }
+    payload.bank_account_name = name;
+    payload.bank_account_number = acc;
+    payload.bank_ifsc = ifsc;
+  }
+
+  const btn = document.getElementById(`bankSubmitBtn-${idx}`);
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try{
+    const res = await fetch(CONFIG.submitBankDetailsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!data.success) throw new Error(data.message || 'failed');
+
+    const li = state.order.line_items[idx];
+    li.request_bank_submitted = true;
+    li.request_bank_details = {
+      method,
+      bank_account_name: payload.bank_account_name || '',
+      bank_account_number: payload.bank_account_number || '',
+      bank_ifsc: payload.bank_ifsc || '',
+      upi_id: payload.upi_id || ''
+    };
+    renderOrderDetail(state.order);
+    toast('Bank details saved ✓');
+  }catch(err){
+    toast("Couldn't save bank details — please try again.");
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+/* ============================================================================
+   RETURN / EXCHANGE MODAL (per line item)
+   ============================================================================ */
+const REASONS = [
+  { label: "Size Issue", icon: '<path d="M4 8V4h4M20 16v4h-4M4 4l16 16"/>' },
+  { label: "Colour Issue", icon: '<circle cx="13.5" cy="6.5" r="0.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="0.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="0.5" fill="currentColor"/><path d="M12 2a10 10 0 100 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4a2.6 2.6 0 002.6-2.6C20 6.6 16.4 2 12 2z"/>' },
+  { label: "Other", icon: '<path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>' }
+];
+
+const CANCEL_REASONS = [
+  { label: "Ordered by Mistake", icon: '<path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>' },
+  { label: "Found a Better Price", icon: '<circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h4.5a2 2 0 010 4H9"/>' },
+  { label: "Changed My Mind", icon: '<path d="M4 8V4h4M20 16v4h-4M4 4l16 16"/>' },
+  { label: "Taking Too Long", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>' },
+  { label: "Other", icon: '<path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>' }
+];
+
+function openRequest(itemIndex, type){
+  const item = state.order.line_items[itemIndex];
+  if(!item) return;
+
+  state.activeItem = { item, itemIndex, type };
+  state.batchItems = null;
+  state.reason = null;
+
+  document.getElementById('modalForm').style.display = 'block';
+  document.getElementById('modalSuccess').style.display = 'none';
+  document.getElementById('modalTitle').textContent = `${type} Request`;
+  document.getElementById('modalSub').textContent = type === 'Return'
+    ? "Tell us why you'd like to return this item."
+    : "Tell us why you'd like to exchange this item.";
+
+  const thumb = item.image ? `<img src="${item.image}" alt="" onerror="this.style.display='none'">` : '';
+  document.getElementById('modalOrderSummary').innerHTML =
+    `${thumb}<div class="msum-text"><b>Order #${state.order.number}</b><span>${escapeHTML(item.name)}</span></div>`;
+
+  document.getElementById('reasonGrid').innerHTML = REASONS.map(r => `
+    <div class="reason-chip" data-reason="${r.label}" onclick="selectReason('${r.label}')">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${r.icon}</svg></span>
+      <span>${r.label}</span>
+      <span class="dot"></span>
+    </div>`).join('');
+
+  const box = document.getElementById('customReasonBox');
+  box.value = '';
+  box.classList.remove('active');
+  document.getElementById('charCount').style.display = 'none';
+  document.getElementById('nextToAddressBtn').disabled = true;
+  document.getElementById('submitRequestBtn').disabled = true;
+
+  document.getElementById('exchangeSizeColorBox').style.display = type === 'Exchange' ? 'block' : 'none';
+  document.getElementById('desiredSize').value = '';
+  document.getElementById('desiredColor').value = '';
+
+  resetAddressToWooCommerce();
+
+  // Hamesha reason step se shuru karo
+  document.getElementById('stepReason').style.display = 'block';
+  document.getElementById('stepAddress').style.display = 'none';
+
+  document.getElementById('requestModal').classList.add('active');
+}
+
+/* ============================================================================
+   MULTI-ITEM (BATCH) RETURN/EXCHANGE — ek saath kai items process karna
+   ============================================================================ */
+function toggleBatchSelect(idx, checked){
+  if(checked) state.selectedForBatch.add(idx);
+  else state.selectedForBatch.delete(idx);
+
+  const count = state.selectedForBatch.size;
+  document.getElementById('batchCount').textContent = count;
+  document.getElementById('batchBar').classList.toggle('show', count >= 2);
+}
+
+function openBatchRequest(type){
+  const items = Array.from(state.selectedForBatch).map(idx => ({ item: state.order.line_items[idx], itemIndex: idx }));
+  if(items.length < 2) return;
+
+  state.batchItems = items;
+  state.batchType = type;
+  state.activeItem = null;
+  state.reason = null;
+
+  document.getElementById('modalForm').style.display = 'block';
+  document.getElementById('modalSuccess').style.display = 'none';
+  document.getElementById('modalTitle').textContent = `${type} Request — ${items.length} Items`;
+  document.getElementById('modalSub').textContent = type === 'Return'
+    ? "Tell us why you'd like to return these items."
+    : "Tell us why you'd like to exchange these items.";
+
+  const namesHTML = items.map(x => `<div class="batch-item-name">${escapeHTML(x.item.name)}</div>`).join('');
+  document.getElementById('modalOrderSummary').innerHTML =
+    `<div class="msum-text"><b>Order #${state.order.number}</b>${namesHTML}</div>`;
+
+  document.getElementById('reasonGrid').innerHTML = REASONS.map(r => `
+    <div class="reason-chip" data-reason="${r.label}" onclick="selectReason('${r.label}')">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${r.icon}</svg></span>
+      <span>${r.label}</span>
+      <span class="dot"></span>
+    </div>`).join('');
+
+  const box = document.getElementById('customReasonBox');
+  box.value = '';
+  box.classList.remove('active');
+  document.getElementById('charCount').style.display = 'none';
+  document.getElementById('nextToAddressBtn').disabled = true;
+  document.getElementById('submitRequestBtn').disabled = true;
+
+  // Batch mein desired size/colour ek-jaisi nahi ho sakti (alag items), isliye exchange
+  // batch ke liye woh field hide rehta hai — QC ke baad admin har item ka size/colour
+  // alag se manage karega.
+  document.getElementById('exchangeSizeColorBox').style.display = 'none';
+  document.getElementById('desiredSize').value = '';
+  document.getElementById('desiredColor').value = '';
+
+  resetAddressToWooCommerce();
+
+  document.getElementById('stepReason').style.display = 'block';
+  document.getElementById('stepAddress').style.display = 'none';
+
+  document.getElementById('requestModal').classList.add('active');
+}
+
+/* Step 1 (reason) -> Step 2 (pickup address) */
+function goToAddressStep(){
+  if(document.getElementById('nextToAddressBtn').disabled) return;
+  document.getElementById('stepReason').style.display = 'none';
+  document.getElementById('stepAddress').style.display = 'block';
+  renderAddressDisplay();
+}
+function backToReasonStep(){
+  document.getElementById('stepAddress').style.display = 'none';
+  document.getElementById('stepReason').style.display = 'block';
+}
+
+/* ============================================================================
+   PICKUP ADDRESS (prefill from WooCommerce, editable, or a fresh address)
+   ============================================================================ */
+function resetAddressToWooCommerce(){
+  const wc = (state.order && state.order.shipping_address) || {};
+  state.pickupAddress = {
+    name: wc.name || '',
+    phone: wc.phone || '',
+    address_line1: wc.address_line1 || '',
+    address_line2: wc.address_line2 || '',
+    city: wc.city || '',
+    state: wc.state || '',
+    pincode: wc.pincode || ''
+  };
+  state.pickupSource = 'woocommerce';
+  renderAddressDisplay();
+  document.getElementById('addressForm').style.display = 'none';
+  document.getElementById('addressDisplay').style.display = 'block';
+}
+
+function renderAddressDisplay(){
+  const a = state.pickupAddress;
+  const hasAddress = a.address_line1 || a.city;
+  document.getElementById('addressDisplay').innerHTML = hasAddress
+    ? `<b>${escapeHTML(a.name || 'Order address')}</b>${a.phone ? escapeHTML(a.phone) + '<br>' : ''}${escapeHTML([a.address_line1, a.address_line2].filter(Boolean).join(', '))}<br>${escapeHTML([a.city, a.state, a.pincode].filter(Boolean).join(', '))}`
+    : `<span class="muted">No saved address on this order — please add one.</span>`;
+  validateAddressStep();
+}
+
+function editAddress(){
+  const a = state.pickupAddress;
+  document.getElementById('addrName').value = a.name || '';
+  document.getElementById('addrPhone').value = a.phone || '';
+  document.getElementById('addrLine1').value = a.address_line1 || '';
+  document.getElementById('addrLine2').value = a.address_line2 || '';
+  document.getElementById('addrCity').value = a.city || '';
+  document.getElementById('addrState').value = a.state || '';
+  document.getElementById('addrPincode').value = a.pincode || '';
+  state.pickupSource = 'edited';
+
+  document.getElementById('addressDisplay').style.display = 'none';
+  document.getElementById('addressForm').style.display = 'block';
+  bindAddressFormInputs();
+  syncAddressFromForm();
+}
+
+function useNewAddress(){
+  state.pickupAddress = { name:'', phone:'', address_line1:'', address_line2:'', city:'', state:'', pincode:'' };
+  state.pickupSource = 'new';
+  ['addrName','addrPhone','addrLine1','addrLine2','addrCity','addrState','addrPincode'].forEach(id => document.getElementById(id).value = '');
+
+  document.getElementById('addressDisplay').style.display = 'none';
+  document.getElementById('addressForm').style.display = 'block';
+  bindAddressFormInputs();
+  syncAddressFromForm();
+  document.getElementById('addrName').focus();
+}
+
+function bindAddressFormInputs(){
+  ['addrName','addrPhone','addrLine1','addrLine2','addrCity','addrState','addrPincode'].forEach(id => {
+    const el = document.getElementById(id);
+    el.oninput = syncAddressFromForm;
+  });
+}
+
+function syncAddressFromForm(){
+  state.pickupAddress = {
+    name: document.getElementById('addrName').value.trim(),
+    phone: document.getElementById('addrPhone').value.replace(/\D/g,'').slice(0,10),
+    address_line1: document.getElementById('addrLine1').value.trim(),
+    address_line2: document.getElementById('addrLine2').value.trim(),
+    city: document.getElementById('addrCity').value.trim(),
+    state: document.getElementById('addrState').value.trim(),
+    pincode: document.getElementById('addrPincode').value.replace(/\D/g,'').slice(0,6)
+  };
+  validateAddressStep();
+}
+
+function selectReason(reason){
+  state.reason = reason;
+  document.querySelectorAll('.reason-chip').forEach(el => {
+    el.classList.toggle('selected', el.dataset.reason === reason);
+  });
+  const box = document.getElementById('customReasonBox');
+  const count = document.getElementById('charCount');
+  // Chahe koi bhi reason chuno (Size/Colour/Other), description box hamesha zaroori hai.
+  box.classList.add('active');
+  count.style.display = 'block';
+  box.focus();
+  validateReasonStep();
+}
+
+document.getElementById('customReasonBox').addEventListener('input', (e) => {
+  document.getElementById('charCount').textContent = `${e.target.value.length} / 300`;
+  validateReasonStep();
+});
+
+function wordCount(str){
+  return (str || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+function validateReasonStep(){
+  const box = document.getElementById('customReasonBox');
+  const reasonOk = state.reason && wordCount(box.value) >= 3;
+  document.getElementById('nextToAddressBtn').disabled = !reasonOk;
+}
+
+function validateAddressStep(){
+  const a = state.pickupAddress || {};
+  const addressOk = a.address_line1 && a.city && a.pincode && a.pincode.length === 6 && a.phone && a.phone.length === 10;
+  document.getElementById('submitRequestBtn').disabled = !addressOk;
+}
+
+function closeModal(){
+  document.getElementById('requestModal').classList.remove('active');
+  document.getElementById('stepReason').style.display = 'block';
+  document.getElementById('stepAddress').style.display = 'none';
+}
+
+async function submitRequest(){
+  const isBatch = !!state.batchItems;
+  const type = isBatch ? state.batchType : state.activeItem.type;
+  const order = state.order;
+  const customReason = document.getElementById('customReasonBox').value.trim();
+  const btn = document.getElementById('submitRequestBtn');
+  btn.disabled = true;
+  btn.textContent = "Submitting...";
+
+  const payload = {
+    identifier: state.identifier,
+    identifier_type: state.identifierType,
+    order_id: order.id,
+    order_number: order.number,
+    type: type, // "Return" or "Exchange"
+    reason: state.reason,
+    custom_reason: customReason,
+    desired_size: type === 'Exchange' ? document.getElementById('desiredSize').value.trim() : '',
+    desired_color: type === 'Exchange' ? document.getElementById('desiredColor').value.trim() : '',
+    pickup_address: state.pickupAddress,
+    pickup_source: state.pickupSource,
+    delivered_date: order.delivered_date,
+    requested_at: new Date().toISOString()
+  };
+
+  if(isBatch){
+    payload.items = state.batchItems.map(x => ({ product_id: x.item.product_id, product_name: x.item.name, quantity: x.item.quantity }));
+  }else{
+    const { item } = state.activeItem;
+    payload.product_id = item.product_id;
+    payload.product_name = item.name;
+    payload.quantity = item.quantity;
+  }
+
+  try{
+    if(!CONFIG.demoMode){
+      const res = await fetch(CONFIG.submitRequestUrl, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error("submit failed");
+      const data = await res.json();
+      if(data.success === false) throw new Error(data.message || "submit failed");
+    }else{
+      await new Promise(r => setTimeout(r, 600));
+      console.log("DEMO submit payload ->", payload);
+    }
+
+    // Item(s) ke against pending status set kar do — turant Return/Exchange button hat jaye
+    // aur "request submitted" wala message dikhe (page refresh/re-lookup ke baad bhi
+    // yehi status backend se aata rahega).
+    const affectedIndexes = isBatch ? state.batchItems.map(x => x.itemIndex) : [state.activeItem.itemIndex];
+    affectedIndexes.forEach(i => {
+      const li = state.order.line_items[i];
+      if(li){
+        li.request_status = 'pending';
+        li.request_type = type;
+      }
+    });
+
+    if(isBatch){
+      state.selectedForBatch.clear();
+      document.getElementById('batchBar').classList.remove('show');
+      document.getElementById('batchCount').textContent = '0';
+    }
+
+    renderOrderDetail(state.order);
+
+    document.getElementById('modalForm').style.display = 'none';
+    document.getElementById('modalSuccess').style.display = 'block';
+  }catch(err){
+    toast(err.message && err.message !== 'submit failed' ? err.message : "Couldn't submit your request. Please try again.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Submit Request";
+  }
+}
+
+/* ============================================================================
+   RATINGS & REVIEWS
+   ============================================================================ */
+const reviewState = {
+  itemIndex: null,
+  rating: 0,
+  photoBase64: ""
+};
+
+/* Demo reviews — sirf demoMode me use hote hain */
+const DEMO_REVIEWS = {
+  501: { average_rating: 4.5, review_count: 2, reviews: [
+    { rating: 5, review_text: "Great fit, true to size. Fabric feels premium.", photo: "", date: daysAgoISO(1) },
+    { rating: 4, review_text: "Good quality, colour slightly darker than photos.", photo: "", date: daysAgoISO(2) }
+  ]}
+};
+
+function starsHTML(rating, size){
+  let html = `<span class="stars readonly">`;
+  for(let i = 1; i <= 5; i++){
+    html += `<svg viewBox="0 0 24 24" class="${i <= Math.round(rating) ? 'filled' : ''}"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+  }
+  html += `</span>`;
+  return html;
+}
+
+async function loadReviewsForItem(idx, productId){
+  const summaryEl = document.getElementById(`review-summary-${idx}`);
+  if(!summaryEl) return;
+
+  try{
+    let data;
+    if(CONFIG.demoMode){
+      await new Promise(r => setTimeout(r, 300));
+      data = DEMO_REVIEWS[productId] || { average_rating: 0, review_count: 0, reviews: [], my_review: null };
+    }else{
+      const url = `${CONFIG.getReviewsUrl}?product_id=${encodeURIComponent(productId)}&identifier=${encodeURIComponent(state.identifier)}`;
+      const res = await fetch(url);
+      data = await res.json();
+    }
+
+    // Public review system abhi nahi bana hai — sirf customer ka apna review dikhega,
+    // koi average rating ya doosron ke reviews nahi (woh baad mein alag se banega).
+    summaryEl.innerHTML = '';
+    const toggleBtn = document.getElementById(`review-toggle-${idx}`);
+    if(toggleBtn) toggleBtn.remove();
+    const listEl = document.getElementById(`review-list-${idx}`);
+    if(listEl) listEl.style.display = 'none';
+
+    if(data.my_review){
+      const ctaRow = document.querySelector(`#review-block-${idx} .review-cta-row`);
+      if(ctaRow){
+        const r = data.my_review;
+        ctaRow.outerHTML = `
+          <div class="my-review-card">
+            <span class="lbl">Your review</span>
+            ${starsHTML(r.rating)}
+            ${r.review_text ? `<div class="rtext" style="margin-top:6px">${escapeHTML(r.review_text)}</div>` : ''}
+            ${r.photo ? `<img src="${r.photo}" alt="your review photo">` : ''}
+            <div class="rdate">${formatDate(r.date)}</div>
+          </div>`;
+      }
+    }
+  }catch(err){
+    summaryEl.innerHTML = '';
+  }
+}
+
+function toggleReviewList(idx){
+  const listEl = document.getElementById(`review-list-${idx}`);
+  const btn = document.getElementById(`review-toggle-${idx}`);
+  const show = listEl.style.display === 'none';
+  listEl.style.display = show ? 'flex' : 'none';
+  btn.textContent = show ? 'Hide reviews' : 'Show reviews';
+}
+
+function openReviewModal(itemIndex){
+  const item = state.order.line_items[itemIndex];
+  if(!item) return;
+
+  reviewState.itemIndex = itemIndex;
+  reviewState.rating = 0;
+  reviewState.photoBase64 = "";
+
+  document.getElementById('reviewForm').style.display = 'block';
+  document.getElementById('reviewSuccess').style.display = 'none';
+
+  const thumb = item.image ? `<img src="${item.image}" alt="" onerror="this.style.display='none'">` : '';
+  document.getElementById('reviewItemSummary').innerHTML =
+    `${thumb}<div class="msum-text"><b>${escapeHTML(item.name)}</b><span>Order #${state.order.number}</span></div>`;
+
+  document.querySelectorAll('#starPicker button').forEach(b => b.classList.remove('active'));
+  document.getElementById('reviewTextBox').value = '';
+  document.getElementById('reviewPhotoInput').value = '';
+  document.getElementById('photoPreview').classList.remove('show');
+  document.getElementById('photoPreview').src = '';
+  document.getElementById('photoUploadText').textContent = '📷 Add a photo (optional)';
+  document.getElementById('submitReviewBtn').disabled = true;
+
+  document.getElementById('reviewModal').classList.add('active');
+}
+
+function setRating(n){
+  reviewState.rating = n;
+  document.querySelectorAll('#starPicker button').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.star, 10) <= n);
+  });
+  document.getElementById('submitReviewBtn').disabled = n < 1;
+}
+
+function handlePhotoSelect(e){
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      // Chhota resize karte hain taaki payload halka rahe
+      const maxDim = 600;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+      reviewState.photoBase64 = dataUrl.split(',')[1] || '';
+
+      const preview = document.getElementById('photoPreview');
+      preview.src = dataUrl;
+      preview.classList.add('show');
+      document.getElementById('photoUploadText').textContent = 'Photo added — tap to change';
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitReview(){
+  const item = state.order.line_items[reviewState.itemIndex];
+  const reviewText = document.getElementById('reviewTextBox').value.trim();
+  const btn = document.getElementById('submitReviewBtn');
+  btn.disabled = true;
+  btn.textContent = "Submitting...";
+
+  const payload = {
+    identifier: state.identifier,
+    order_id: state.order.id,
+    order_number: state.order.number,
+    product_id: item.product_id,
+    product_name: item.name,
+    rating: reviewState.rating,
+    review_text: reviewText,
+    photo_base64: reviewState.photoBase64,
+    submitted_at: new Date().toISOString()
+  };
+
+  try{
+    if(!CONFIG.demoMode){
+      const res = await fetch(CONFIG.submitReviewUrl, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error("submit failed");
+    }else{
+      await new Promise(r => setTimeout(r, 600));
+      console.log("DEMO review payload ->", payload);
+    }
+
+    document.getElementById('reviewForm').style.display = 'none';
+    document.getElementById('reviewSuccess').style.display = 'block';
+  }catch(err){
+    toast("Couldn't submit your review. Please try again.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Submit Review";
+  }
+}
+
+/* ============================================================================
+   BOTTOM SHEET — drag/over-scroll se close
+   - Sheet ke TOP par ho aur neeche kheenchein  -> band
+   - Sheet ke END tak scroll kar liya aur aur scroll karein -> band
+   ============================================================================ */
+function enableSheetDismiss(card, onClose){
+  let startY = 0, armed = false, pulling = false, moved = 0;
+
+  const clearDrag = () => {
+    card.classList.remove('dragging');
+    card.style.transition = '';
+    card.style.transform = '';
+  };
+
+  card.addEventListener('touchstart', (e) => {
+    if(e.touches.length !== 1){ armed = false; return; }
+    // Sirf arm karte hain — abhi koi style/transform touch NAHI karna,
+    // warna normal scroll shuru hote hi ek frame ka jerk dikhta hai.
+    armed = card.scrollTop <= 0;
+    pulling = false;
+    moved = 0;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+
+  card.addEventListener('touchmove', (e) => {
+    if(!armed || e.touches.length !== 1) return;
+    const dy = e.touches[0].clientY - startY;
+
+    if(!pulling){
+      if(Math.abs(dy) < 12) return;          // intent clear hone tak kuch mat karo
+      if(dy <= 0 || card.scrollTop > 0){      // upar swipe = normal scroll -> chhod do
+        armed = false;
+        return;
+      }
+      pulling = true;
+      card.classList.add('dragging');
+      card.style.transition = 'none';
+      startY = e.touches[0].clientY;          // yahi se 0 maano, taaki jump na ho
+      return;
+    }
+
+    moved = Math.max(dy, 0);
+    card.style.transform = `translateY(${moved}px)`;
+  }, { passive: true });
+
+  const finish = () => {
+    if(!pulling){ armed = false; return; }
+    pulling = false; armed = false;
+
+    if(moved > 100){
+      card.style.transition = 'transform .2s ease';
+      card.style.transform = 'translateY(110%)';
+      setTimeout(() => { clearDrag(); onClose(); }, 190);
+    }else{
+      card.style.transition = 'transform .18s ease';
+      card.style.transform = '';
+      setTimeout(clearDrag, 190);
+    }
+  };
+  card.addEventListener('touchend', finish, { passive: true });
+  card.addEventListener('touchcancel', finish, { passive: true });
+}
+
+function initSheets(){
+  document.querySelectorAll('.modal-overlay').forEach(ov => {
+    const card = ov.querySelector('.modal-card');
+    if(!card) return;
+    const close = () => {
+      if(ov.id === 'reviewModal' && typeof closeReviewModal === 'function') closeReviewModal();
+      else ov.classList.remove('active');
+    };
+    enableSheetDismiss(card, close);
+    // Popup ke bahar (dark area) tap karne par band
+    ov.addEventListener('click', (e) => { if(e.target === ov) close(); });
+  });
+}
+
+/* ============================================================================
+   BOOT
+   ============================================================================ */
+/* ============================================================================
+   ACCOUNT — Support (WhatsApp) + Manage Address
+   ============================================================================ */
+function supportLink(extra){
+  const num = state.order ? state.order.number : '';
+  let msg = num ? `Hi Smarticlab, I need help with my order #${num}.` : 'Hi Smarticlab, I need help with my order.';
+  if(extra) msg += ' ' + extra;
+  return `https://wa.me/${CONFIG.supportWhatsApp}?text=${encodeURIComponent(msg)}`;
+}
+function openSupport(extra){
+  closeUserMenu();
+  window.open(supportLink(extra), '_blank', 'noopener');
+}
+
+const IN_STATES = [
+  ['AN','Andaman and Nicobar Islands'],['AP','Andhra Pradesh'],['AR','Arunachal Pradesh'],['AS','Assam'],
+  ['BR','Bihar'],['CH','Chandigarh'],['CT','Chhattisgarh'],['DN','Dadra and Nagar Haveli and Daman and Diu'],
+  ['DL','Delhi'],['GA','Goa'],['GJ','Gujarat'],['HR','Haryana'],['HP','Himachal Pradesh'],
+  ['JK','Jammu and Kashmir'],['JH','Jharkhand'],['KA','Karnataka'],['KL','Kerala'],['LA','Ladakh'],
+  ['LD','Lakshadweep'],['MP','Madhya Pradesh'],['MH','Maharashtra'],['MN','Manipur'],['ML','Meghalaya'],
+  ['MZ','Mizoram'],['NL','Nagaland'],['OR','Odisha'],['PY','Puducherry'],['PB','Punjab'],['RJ','Rajasthan'],
+  ['SK','Sikkim'],['TN','Tamil Nadu'],['TS','Telangana'],['TR','Tripura'],['UP','Uttar Pradesh'],
+  ['UK','Uttarakhand'],['WB','West Bengal']
+];
+function stateName(v){
+  const x = String(v || '').trim();
+  const hit = IN_STATES.find(([c, n]) => c.toLowerCase() === x.toLowerCase() || n.toLowerCase() === x.toLowerCase());
+  return hit ? hit[1] : x;
+}
+
+const acct = { data: null };   // Woo se laaya hua current address + email
+
+const WA_ICON = '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm5.3 14.2c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.4-.7-2.8-1.1-4.6-4-4.8-4.2-.1-.2-1.1-1.5-1.1-2.9s.7-2.1 1-2.4c.3-.3.6-.3.8-.3h.6c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.4.6-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.1.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l2 1c.3.1.5.2.5.3.1.2.1.8-.1 1.4z"/></svg>';
+
+async function openManageAddress(){
+  closeUserMenu();
+  if(!state.order) return;
+  document.getElementById('acctAddrSub').textContent = `Order #${state.order.number}`;
+  document.getElementById('acctAddrBody').innerHTML = '<div class="loader"><div class="spinner"></div></div>';
+  document.getElementById('acctAddrModal').classList.add('active');
+
+  try{
+    const res = await fetch(CONFIG.updateAddressUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'get', order_no: state.order.number, identifier: state.identifier, type: state.identifierType })
+    });
+    const data = await res.json();
+    if(!data || !data.success) throw new Error((data && data.message) || 'failed');
+    acct.data = data;
+    renderManageAddress(false);
+  }catch(e){
+    document.getElementById('acctAddrBody').innerHTML = `
+      <div class="acct-err show">${escapeHTML(e.message && e.message !== 'failed' ? e.message : "Couldn't load your address. Please try again.")}</div>
+      <button class="btn-secondary" onclick="openManageAddress()">Try again</button>`;
+  }
+}
+function closeManageAddress(){
+  document.getElementById('acctAddrModal').classList.remove('active');
+}
+
+function renderManageAddress(editing){
+  const d = acct.data || {};
+  const a = d.address || {};
+  const body = document.getElementById('acctAddrBody');
+
+  const view = `
+    ${d.registered ? '<div style="font-size:11.5px; font-weight:700; color:var(--green); margin-bottom:8px;">✓ Saved in your Smarticlab account</div>' : ''}
+    <div class="acct-addr-view">
+      <b>${escapeHTML(a.name || '—')}</b>
+      ${escapeHTML(a.address_line1 || '')}${a.address_line2 ? ', ' + escapeHTML(a.address_line2) : ''}<br>
+      ${escapeHTML(a.city || '')}${a.city ? ', ' : ''}${escapeHTML(stateName(a.state))} ${escapeHTML(a.pincode || '')}<br>
+      ${a.phone ? '📞 ' + escapeHTML(a.phone) + '<br>' : ''}
+      ✉️ ${d.email ? escapeHTML(d.email) : '<span style="color:var(--muted)">No email added</span>'}
+    </div>`;
+
+  if(!d.can_edit){
+    body.innerHTML = `
+      ${view}
+      <div class="acct-lock">Your order has already been shipped, so the delivery address can't be changed here. Our team can help you on WhatsApp.</div>
+      <a class="wa-btn" href="${supportLink('I want to change my delivery address.')}" target="_blank" rel="noopener">${WA_ICON} Chat on WhatsApp</a>
+      <button class="btn-secondary" onclick="closeManageAddress()">Close</button>`;
+    return;
+  }
+
+  const shippedNote = (d.registered && d.order_locked)
+    ? `<div class="acct-lock">This order has already shipped. Changes will be saved to your account for your next orders. To change this delivery, <a href="${supportLink('I want to change my delivery address.')}" target="_blank" rel="noopener" style="color:#128C4A; font-weight:700;">chat with us</a>.</div>`
+    : '';
+
+  if(!editing){
+    body.innerHTML = `
+      ${view}
+      ${shippedNote}
+      <button class="btn-primary" style="margin-top:14px;" onclick="renderManageAddress(true)">${d.email ? 'Edit Address & Email' : 'Edit Address / Add Email'}</button>
+      <button class="btn-secondary" onclick="closeManageAddress()">Close</button>`;
+    return;
+  }
+
+  const stOpts = IN_STATES.map(([c, n]) => `<option value="${n}" ${stateName(a.state) === n ? 'selected' : ''}>${n}</option>`).join('');
+  const loginHint = (d.registered && d.account_email)
+    ? `<div style="font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.5;">Order updates go to this email. Your login email (${escapeHTML(d.account_email)}) stays the same — change it from <a href="https://smarticlab.in/my-account/edit-account/" target="_blank" rel="noopener" style="color:var(--green); font-weight:700;">My Account</a>.</div>`
+    : '';
+
+  body.innerHTML = `
+    ${shippedNote}
+    <label class="acct-lbl">Full name</label>
+    <input class="acct-input" id="adName" value="${escapeHTML(a.name || '')}" autocomplete="name">
+    <label class="acct-lbl">Phone</label>
+    <input class="acct-input" id="adPhone" inputmode="numeric" maxlength="10" value="${escapeHTML(String(a.phone || '').replace(/\D/g,'').slice(-10))}" autocomplete="tel">
+    <label class="acct-lbl">Email ${d.email ? '' : '(optional)'}</label>
+    <input class="acct-input" id="adEmail" type="email" inputmode="email" value="${escapeHTML(d.email || '')}" placeholder="you@example.com" autocomplete="email">
+    ${loginHint}
+    <label class="acct-lbl">House no., building, street</label>
+    <input class="acct-input" id="adLine1" value="${escapeHTML(a.address_line1 || '')}" autocomplete="address-line1">
+    <label class="acct-lbl">Area, landmark (optional)</label>
+    <input class="acct-input" id="adLine2" value="${escapeHTML(a.address_line2 || '')}" autocomplete="address-line2">
+    <div class="acct-row">
+      <div>
+        <label class="acct-lbl">City</label>
+        <input class="acct-input" id="adCity" value="${escapeHTML(a.city || '')}" autocomplete="address-level2">
+      </div>
+      <div>
+        <label class="acct-lbl">Pincode</label>
+        <input class="acct-input" id="adPin" inputmode="numeric" maxlength="6" value="${escapeHTML(a.pincode || '')}" autocomplete="postal-code">
+      </div>
+    </div>
+    <label class="acct-lbl">State</label>
+    <select class="acct-input" id="adState"><option value="">Select state</option>${stOpts}</select>
+    <div class="acct-err" id="adErr"></div>
+    <button class="btn-primary" style="margin-top:16px;" id="adSave" onclick="saveManageAddress()">Save</button>
+    <button class="btn-secondary" onclick="renderManageAddress(false)">Cancel</button>`;
+}
+
+async function saveManageAddress(){
+  const v = (id) => (document.getElementById(id).value || '').trim();
+  const address = {
+    name: v('adName'),
+    phone: v('adPhone').replace(/\D/g, ''),
+    address_line1: v('adLine1'),
+    address_line2: v('adLine2'),
+    city: v('adCity'),
+    state: v('adState'),
+    pincode: v('adPin').replace(/\D/g, '')
+  };
+  const email = v('adEmail').toLowerCase();
+  const err = document.getElementById('adErr');
+  const showErr = (m) => { err.textContent = m; err.classList.add('show'); };
+  err.classList.remove('show');
+
+  if(!address.name) return showErr('Please enter the full name.');
+  if(address.phone.length !== 10) return showErr('Please enter a valid 10-digit phone number.');
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return showErr('Please enter a valid email address.');
+  if(address.address_line1.length < 5) return showErr('Please enter the house / street address.');
+  if(!address.city) return showErr('Please enter the city.');
+  if(!/^[1-9][0-9]{5}$/.test(address.pincode)) return showErr('Please enter a valid 6-digit pincode.');
+  if(!address.state) return showErr('Please select the state.');
+
+  const btn = document.getElementById('adSave');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try{
+    const res = await fetch(CONFIG.updateAddressUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'update',
+        order_no: state.order.number,
+        identifier: state.identifier,
+        type: state.identifierType,
+        address,
+        email
+      })
+    });
+    const data = await res.json();
+
+    if(data && data.success){
+      acct.data = Object.assign({}, acct.data, { address: data.address || address, email: data.email || email });
+      if(data.order_updated){
+        state.order.shipping_address = Object.assign({}, state.order.shipping_address || {}, data.address || address);
+        saveSession();
+        updateUserChip();
+      }
+      renderManageAddress(false);
+      toast(data.message || 'Saved ✓');
+    }else if(data && data.locked){
+      acct.data = Object.assign({}, acct.data, { can_edit: false });
+      renderManageAddress(false);
+    }else{
+      showErr((data && data.message) || "Couldn't save. Please try again.");
+    }
+  }catch(e){
+    showErr("Couldn't save. Please check your connection and try again.");
+  }finally{
+    const b = document.getElementById('adSave');
+    if(b){ b.disabled = false; b.textContent = 'Save'; }
+  }
+}
+
+function applyBranding(){
+  const shop = CONFIG.shopUrl || '/';
+  const shopBtn = document.getElementById('shopBtn');
+  const logo = document.getElementById('brandLogo');
+  if(shopBtn) shopBtn.href = shop;
+  if(logo){
+    logo.href = shop;
+    if(CONFIG.logoUrl){
+      const img = new Image();
+      img.alt = 'Smarticlab';
+      img.onload = () => { logo.innerHTML = ''; logo.appendChild(img); };
+      img.src = CONFIG.logoUrl;   // load fail hua to wordmark hi rahega
+    }
+  }
+}
+
+try{ applyBranding(); }catch(e){ console.warn('branding', e); }
+try{ initSheets(); }catch(e){ console.warn('sheets', e); }
+Promise.resolve().then(restoreSession).catch(err => {
+  console.warn('restore failed, clearing session', err);
+  try{ clearSession(); state.order = null; showScreen('lookup'); updateUserChip(); }catch(e){}
+});
+
+function closeReviewModal(){
+  document.getElementById('reviewModal').classList.remove('active');
+  // Naya review turant dikhe isliye list refresh kar dete hain
+  if(reviewState.itemIndex !== null){
+    const item = state.order.line_items[reviewState.itemIndex];
+    if(item && item.product_id) loadReviewsForItem(reviewState.itemIndex, item.product_id);
+  }
+}
+</script>
+</body>
+</html>
