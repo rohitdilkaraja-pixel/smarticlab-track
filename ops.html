@@ -586,7 +586,7 @@ const CONFIG = {
   deletedListUrl: "https://auto.rohitvision.com/webhook/admin-list-deleted-requests",
   generateSlipUrl: "https://auto.rohitvision.com/webhook/admin-generate-delivery-slip",
   generatePickupUrl: "https://auto.rohitvision.com/webhook/admin-generate-pickup",
-  checkServiceabilityUrl: "https://auto.rohitvision.com/webhook/admin-check-serviceability",
+  courierOptionsUrl: "https://auto.rohitvision.com/webhook/admin-courier-options",
   generateBatchPickupUrl: "https://auto.rohitvision.com/webhook/admin-generate-batch-pickup",
   getSettingsUrl: "https://auto.rohitvision.com/webhook/admin-get-settings",
   updateSettingsUrl: "https://auto.rohitvision.com/webhook/admin-update-settings",
@@ -1034,27 +1034,91 @@ async function generateSlip(id){
 /* ---------------------------------------------------------------------------
    MANUAL PICKUP GENERATION — admin khud courier choose karta hai
    --------------------------------------------------------------------------- */
-async function checkServiceability(id){
-  const pincode = document.getElementById(`pincode-${id}`).value.trim();
-  const resultBox = document.getElementById(`serviceabilityResult-${id}`);
-  if(!pincode){
-    toast('Pincode daalo pehle.');
+// Dono couriers ka availability + reverse-pickup price ek saath, phir admin choose kare.
+// Sirf wahi courier select ho sakta hai jise backend generate bhi kar sakta hai
+// (can_generate) -- warna screen Delhivery bolti aur pickup Shadowfax ka ban jaata.
+function courierRowHTML(id, o, recommended){
+  const ok = o.serviceable === true;
+  const unknown = o.serviceable === null;
+  const selectable = ok && o.can_generate === true;
+  const mark = ok
+    ? '<span style="color:#0A7A42;font-weight:700;">✓</span>'
+    : (unknown ? '<span style="color:#9a7a00;font-weight:700;">?</span>'
+               : '<span style="color:#9E2B2B;font-weight:700;">✕</span>');
+  const hasPrice = (typeof o.price === 'number');
+  const priceTxt = hasPrice ? ('₹' + o.price) : '—';
+  const errs = Array.isArray(o.errors) ? o.errors : [];
+  const priceWhy = hasPrice ? '' : errs.filter(e => String(e).indexOf('price:') === 0).join(' ');
+  const svcErr = errs.filter(e => String(e).indexOf('serviceability:') === 0).join(' ');
+  const bits = [];
+  if(o.city) bits.push(escapeHTML(o.city));
+  if(Array.isArray(o.services) && o.services.length) bits.push(o.services.map(escapeHTML).join(', '));
+  const meta = bits.length ? ' · ' + bits.join(' · ') : '';
+  const note = !selectable && ok && o.generate_note
+    ? `<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">${escapeHTML(o.generate_note)}</div>` : '';
+  const svcNote = svcErr
+    ? `<div style="font-size:10.5px;color:#9E2B2B;margin-top:2px;">${escapeHTML(svcErr)}</div>` : '';
+  return `
+    <label style="display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;${selectable ? '' : 'opacity:.6;'}">
+      <input type="radio" name="courierPick-${id}" value="${escapeHTML(o.courier)}" style="margin-top:3px;" ${selectable ? '' : 'disabled'} ${(selectable && recommended === o.courier) ? 'checked' : ''}>
+      <span style="flex:1;min-width:0;font-size:12.5px;">
+        ${mark} <b>${escapeHTML(o.label)}</b>${(selectable && recommended === o.courier) ? ' <span style="font-size:10.5px;color:#0A7A42;">(suggested)</span>' : ''}
+        <span style="color:var(--muted);font-size:11px;">${meta}</span>
+        ${note}${svcNote}
+      </span>
+      <span style="font-size:12.5px;font-weight:700;white-space:nowrap;" title="${escapeHTML(priceWhy)}">${priceTxt}</span>
+    </label>`;
+}
+
+async function checkCouriers(id){
+  const pinEl = document.getElementById(`pincode-${id}`);
+  const wtEl  = document.getElementById(`weight-${id}`);
+  const box   = document.getElementById(`courierOptions-${id}`);
+  const btn   = document.getElementById(`genPickupBtn-${id}`);
+  const pincode = pinEl ? pinEl.value.trim() : '';
+  const weight = (wtEl && wtEl.value.trim()) ? wtEl.value.trim() : '500';
+  if(!/^[1-9][0-9]{5}$/.test(pincode)){
+    toast('6-digit pincode daalo pehle.');
     return;
   }
-  resultBox.textContent = 'Checking...';
+  if(btn) btn.disabled = true;
+  box.innerHTML = '<div style="font-size:11.5px;color:var(--muted);">Dono couriers check kar rahe hain…</div>';
   try{
-    const res = await fetch(`${CONFIG.checkServiceabilityUrl}?pincode=${encodeURIComponent(pincode)}`, {
+    const res = await fetch(`${CONFIG.courierOptionsUrl}?pincode=${encodeURIComponent(pincode)}&weight=${encodeURIComponent(weight)}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
     const data = await res.json();
-    if(data.delhivery_serviceable){
-      resultBox.innerHTML = `<span style="color:#0A7A42; font-weight:600;">✓ One Delivery (Delhivery) serviceable here</span>${data.delhivery_details ? ` — ${escapeHTML(data.delhivery_details.city || '')}` : ''}`;
-    }else{
-      resultBox.innerHTML = `<span style="color:#9E2B2B; font-weight:600;">✕ One Delivery not serviceable for this pincode</span> — try Shadowfax instead.`;
+    const opts = Array.isArray(data.options) ? data.options : [];
+    if(!opts.length){
+      box.innerHTML = '<div style="font-size:11.5px;color:#9E2B2B;">Koi courier option nahi mila.</div>';
+      return;
+    }
+    box.innerHTML = opts.map(o => courierRowHTML(id, o, data.recommended)).join('');
+    const radios = box.querySelectorAll(`input[name="courierPick-${id}"]:not([disabled])`);
+    if(radios.length && !box.querySelector(`input[name="courierPick-${id}"]:checked`)){
+      radios[0].checked = true;
+    }
+    if(btn) btn.disabled = (radios.length === 0);
+    if(radios.length === 0){
+      box.innerHTML += '<div style="font-size:11.5px;color:#9E2B2B;margin-top:4px;">Is pincode par koi courier pickup generate nahi kar sakta.</div>';
     }
   }catch(err){
-    resultBox.textContent = "Couldn't check right now.";
+    box.innerHTML = '<div style="font-size:11.5px;color:#9E2B2B;">Check nahi ho paaya — dobara try karo.</div>';
   }
+}
+
+function generateChosenPickup(id){
+  const el = document.querySelector(`input[name="courierPick-${id}"]:checked`);
+  if(!el){
+    toast('Pehle courier choose karo.');
+    return;
+  }
+  generatePickup(id, el.value);
 }
 
 async function generatePickup(id, courier){
@@ -1911,13 +1975,14 @@ function cardHTML(r){
         <div class="awb-pending-lbl">📦 Reverse pickup abhi generate nahi hua</div>
         <div style="display:flex; gap:8px; margin-bottom:8px;">
           <input type="text" id="pincode-${r.id}" value="${escapeHTML(r.pickup_pincode || '')}" placeholder="Pincode" style="flex:1; min-width:0; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px;">
-          <button class="extend-fetch-btn" style="flex-shrink:0;" onclick="checkServiceability('${r.id}')">Check Serviceability</button>
+          <input type="text" id="weight-${r.id}" value="500" placeholder="Wt (g)" style="width:78px; flex-shrink:0; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px;">
+          <button class="extend-fetch-btn" style="flex-shrink:0;" onclick="checkCouriers('${r.id}')">Check Couriers</button>
         </div>
-        <div id="serviceabilityResult-${r.id}" style="font-size:11.5px; color:var(--muted); margin-bottom:8px;"></div>
+        <div id="courierOptions-${r.id}" style="margin-bottom:8px;"></div>
         <div style="display:flex; gap:8px;">
-          <button class="save-awb-btn" style="flex:1; min-width:0;" onclick="generatePickup('${r.id}','shadowfax')">📦 Generate via Shadowfax</button>
+          <button class="save-awb-btn" id="genPickupBtn-${r.id}" style="flex:1; min-width:0;" disabled onclick="generateChosenPickup('${r.id}')">📦 Generate Pickup</button>
         </div>
-        <div class="awb-optional-lbl" style="margin-top:10px;">One Delivery (Delhivery) — pickup unke portal pe khud banao, phir AWB yahan record karo</div>
+        <div class="awb-optional-lbl" style="margin-top:10px;">Kisi aur courier se pickup banaya? AWB yahan record karo</div>
         <div class="awb-row" style="margin-top:6px">
           <input type="text" id="awb-${r.id}" placeholder="AWB number">
           <input type="text" id="courier-${r.id}" placeholder="Courier" value="One Delivery">
