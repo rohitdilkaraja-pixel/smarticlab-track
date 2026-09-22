@@ -401,6 +401,7 @@
   <div class="sb-sec">Other</div>
   <button class="nav-item" data-filter="extended" onclick="setFilter('extended')"><span class="ic">🕐</span>Extended Windows</button>
   <button class="nav-item" data-filter="deleted" onclick="setFilter('deleted')"><span class="ic">🗑</span>Deleted</button>
+  <button class="nav-item" data-filter="lookup" onclick="setFilter('lookup')"><span class="ic">🔎</span>Order Lookup</button>
 
   <div class="sb-foot">
     <button class="nav-item" onclick="closeSidebar(); openExtendWindow()"><span class="ic">⏱</span>Extend Window</button>
@@ -587,6 +588,8 @@ const CONFIG = {
   generateSlipUrl: "https://auto.rohitvision.com/webhook/admin-generate-delivery-slip",
   generatePickupUrl: "https://auto.rohitvision.com/webhook/admin-generate-pickup",
   courierOptionsUrl: "https://auto.rohitvision.com/webhook/admin-courier-options",
+  lookupUrl: "https://auto.rohitvision.com/webhook/admin-lookup-orders",
+  trackOrderUrl: "https://auto.rohitvision.com/webhook/track-order",
   generateBatchPickupUrl: "https://auto.rohitvision.com/webhook/admin-generate-batch-pickup",
   getSettingsUrl: "https://auto.rohitvision.com/webhook/admin-get-settings",
   updateSettingsUrl: "https://auto.rohitvision.com/webhook/admin-update-settings",
@@ -809,7 +812,8 @@ function renderStats(){
 
 const FILTER_LABELS = {
   all: 'All', pending: 'Needs Decision', approved: 'Approved', disapproved: 'Rejected',
-  awb_pending: 'Pickup to Generate', qc_pending: 'QC Pending', extended: 'Extended Windows', deleted: 'Deleted'
+  awb_pending: 'Pickup to Generate', qc_pending: 'QC Pending', extended: 'Extended Windows', deleted: 'Deleted',
+  lookup: 'Order Lookup'
 };
 const TYPE_LABELS = { all: 'Requests', Return: 'Returns', Exchange: 'Exchanges' };
 
@@ -821,7 +825,7 @@ function syncNav(){
   document.querySelectorAll('#typeSwitch button').forEach(b =>
     b.classList.toggle('active', b.dataset.type === currentType));
 
-  const special = currentFilter === 'extended' || currentFilter === 'deleted';
+  const special = currentFilter === 'extended' || currentFilter === 'deleted' || currentFilter === 'lookup';
   document.getElementById('typeSwitch').style.display = special ? 'none' : 'flex';
 
   let title;
@@ -833,7 +837,7 @@ function syncNav(){
 
 function setType(t){
   currentType = t;
-  if(currentFilter === 'extended' || currentFilter === 'deleted') currentFilter = 'all';
+  if(currentFilter === 'extended' || currentFilter === 'deleted' || currentFilter === 'lookup') currentFilter = 'all';
   closeSidebar();
   renderStats();
   syncNav();
@@ -852,6 +856,8 @@ function setFilter(f){
     loadExtendedWindows();
   }else if(f === 'deleted'){
     loadDeletedRequests();
+  }else if(f === 'lookup'){
+    renderLookupForm();
   }else{
     renderList();
   }
@@ -860,6 +866,7 @@ function setFilter(f){
 function refreshCurrent(){
   if(currentFilter === 'extended') loadExtendedWindows();
   else if(currentFilter === 'deleted') loadDeletedRequests();
+  else if(currentFilter === 'lookup') renderLookupForm();
   else loadRequests();
 }
 
@@ -977,6 +984,146 @@ function renderDeletedList(){
       <div class="req-meta" style="color:var(--muted);">Deleted: ${formatDate(r.deleted_at) || '—'}</div>
     </div>
   `).join('');
+}
+
+/* ---------------------------------------------------------------------------
+   ORDER LOOKUP — order number / AWB / phone / email me se kisi ek se poora
+   picture: order, uske return/exchange requests, aur dono ki tracking.
+   --------------------------------------------------------------------------- */
+let lookupResult = null;
+
+function renderLookupForm(){
+  const listEl = document.getElementById('list');
+  const v = lookupResult || {};
+  listEl.innerHTML = `
+    <div class="req-card neutral-card" style="margin-bottom:12px;">
+      <div class="req-order" style="margin-bottom:8px;">&#128270; Order Lookup</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+        <select id="lookupMode" style="flex:0 0 140px; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px; background:#fff;">
+          <option value="order">Order number</option>
+          <option value="awb">AWB number</option>
+          <option value="phone">Phone number</option>
+          <option value="email">Email</option>
+        </select>
+        <input type="text" id="lookupValue" placeholder="Yahan daalo…" style="flex:1; min-width:150px; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:12.5px;"
+               onkeydown="if(event.key==='Enter'){runLookup();}">
+        <button class="save-awb-btn" style="flex:0 0 auto;" onclick="runLookup()">&#128269; Track</button>
+      </div>
+      <div style="font-size:11px; color:var(--muted);">Phone ya email par us customer ke 5 tak recent orders aayenge.</div>
+    </div>
+    <div id="lookupResults"></div>`;
+  const modeEl = document.getElementById('lookupMode');
+  if(modeEl && v.mode) modeEl.value = v.mode;
+  const valEl = document.getElementById('lookupValue');
+  if(valEl && v.value) valEl.value = v.value;
+  if(lookupResult) paintLookupResults(lookupResult);
+}
+
+async function runLookup(){
+  const mode = document.getElementById('lookupMode').value;
+  const value = document.getElementById('lookupValue').value.trim();
+  const box = document.getElementById('lookupResults');
+  if(!value){ toast('Kuch daalo pehle.'); return; }
+  box.innerHTML = `<div class="loading"><div class="spinner"></div>Dhoondh rahe hain…</div>`;
+  try{
+    const res = await fetch(`${CONFIG.lookupUrl}?mode=${encodeURIComponent(mode)}&value=${encodeURIComponent(value)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(res.status === 401){
+      toast('Session expired — please log in again.');
+      setTimeout(logout, 1200);
+      return;
+    }
+    const data = await res.json();
+    lookupResult = data;
+    paintLookupResults(data);
+  }catch(err){
+    box.innerHTML = `<div class="empty">Lookup nahi ho paaya — dobara try karo.</div>`;
+  }
+}
+
+function paintLookupResults(data){
+  const box = document.getElementById('lookupResults');
+  if(!box) return;
+  const notes = (data.notes || []).map(n => `<div class="empty">${escapeHTML(n)}</div>`).join('');
+  const orders = data.orders || [];
+  if(!orders.length){ box.innerHTML = notes || `<div class="empty">Kuch nahi mila.</div>`; return; }
+  box.innerHTML = notes + orders.map(lookupOrderCardHTML).join('');
+}
+
+function lookupOrderCardHTML(o){
+  const items = (o.items || []).map(it =>
+    `<div class="req-meta">• ${escapeHTML(it.name)} ×${it.qty}</div>`).join('');
+  const reqs = (o.requests || []).map(r => lookupRequestHTML(o, r)).join('')
+    || `<div class="req-meta" style="color:var(--muted);">Is order par koi return/exchange nahi hai.</div>`;
+  const contact = [o.phone, o.email].filter(Boolean).map(escapeHTML).join(' · ');
+  const where = [o.city, o.state, o.pincode].filter(Boolean).map(escapeHTML).join(', ');
+  return `
+    <div class="req-card neutral-card" style="margin-bottom:12px;">
+      <div class="req-top">
+        <div>
+          <div class="req-order">Order #${escapeHTML(o.order_number)}</div>
+          <div class="req-date">${formatDate(o.date) || escapeHTML(o.date || '')} · ${escapeHTML(o.status)}</div>
+        </div>
+        <div style="text-align:right; font-weight:700; font-size:13px;">₹${escapeHTML(o.total)}</div>
+      </div>
+      <div class="req-meta" style="margin-top:6px;"><b>${escapeHTML(o.customer_name || '—')}</b></div>
+      <div class="req-meta" style="color:var(--muted);">${contact}</div>
+      <div class="req-meta" style="color:var(--muted);">${where}${o.payment_method ? ' · ' + escapeHTML(o.payment_method) : ''}</div>
+      <div style="margin-top:8px;">${items}</div>
+      <button class="save-awb-btn" style="width:100%; margin-top:10px;"
+        onclick="trackAny('order','${escapeHTML(o.order_number)}','${escapeHTML(o.phone || o.email || '')}','Order #${escapeHTML(o.order_number)}')">📍 Is order ki tracking</button>
+      <div style="margin-top:10px;">${reqs}</div>
+    </div>`;
+}
+
+function lookupRequestHTML(o, r){
+  const rows = [];
+  rows.push(`<div class="req-meta"><b>${escapeHTML(r.type || 'Request')}</b> · ${escapeHTML(r.status || '')}${r.product_name ? ' · ' + escapeHTML(r.product_name) : ''}</div>`);
+  if(r.reason) rows.push(`<div class="req-meta" style="color:var(--muted);">Reason: ${escapeHTML(r.reason)}</div>`);
+  if(r.qc_status) rows.push(`<div class="req-meta">QC: ${escapeHTML(r.qc_status)}${r.qc_note ? ' — ' + escapeHTML(r.qc_note) : ''}</div>`);
+  if(r.refund_completed_at) rows.push(`<div class="req-meta">Refund done: ${formatDate(r.refund_completed_at) || ''}${r.refund_method ? ' · ' + escapeHTML(r.refund_method) : ''}</div>`);
+
+  if(r.awb_number){
+    rows.push(`<div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+      <span class="req-meta" style="flex:1; min-width:0;">↩️ Pickup AWB: ${escapeHTML(r.awb_number)}${r.awb_courier ? ' · ' + escapeHTML(r.awb_courier) : ''}</span>
+      <button class="extend-fetch-btn" style="flex-shrink:0;" onclick="trackAny('awb','${escapeHTML(r.awb_number)}','','Pickup ${escapeHTML(r.awb_number)}')">Track</button>
+    </div>`);
+  }
+  if(r.exchange_delivery_awb){
+    rows.push(`<div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+      <span class="req-meta" style="flex:1; min-width:0;">🔄 Replacement AWB: ${escapeHTML(r.exchange_delivery_awb)}${r.exchange_delivery_order_number ? ' · ' + escapeHTML(r.exchange_delivery_order_number) : ''}</span>
+      <button class="extend-fetch-btn" style="flex-shrink:0;" onclick="trackAny('awb','${escapeHTML(r.exchange_delivery_awb)}','','Replacement ${escapeHTML(r.exchange_delivery_awb)}')">Track</button>
+    </div>`);
+  }
+  return `<div style="border-left:3px solid var(--border); padding-left:9px; margin-top:8px;">${rows.join('')}</div>`;
+}
+
+// Order ya AWB — dono /webhook/track-order se, kyunki wo Shadowfax aur
+// Delhivery dono handle karta hai. Modal wahi hai jo pickup tracking use karta hai.
+async function trackAny(kind, value, contact, label){
+  document.getElementById('trackModalOverlay').classList.add('show');
+  document.getElementById('trackModalAwb').textContent = label || value;
+  document.getElementById('trackModalBody').innerHTML = `<div class="loading"><div class="spinner"></div>Loading tracking...</div>`;
+  try{
+    let url = `${CONFIG.trackOrderUrl}?mode=${encodeURIComponent(kind)}&value=${encodeURIComponent(value)}`;
+    if(contact) url += `&contact=${encodeURIComponent(contact)}`;
+    const res = await fetch(url);
+    const raw = await res.json();
+    const d = Array.isArray(raw) ? (raw[0] || {}) : (raw || {});
+    const tl = Array.isArray(d.timeline) ? d.timeline : [];
+    const head = `<div class="req-meta" style="margin-bottom:8px;"><b>${escapeHTML(d.status || d.badge || 'Status unknown')}</b>${d.current_location ? ' · ' + escapeHTML(d.current_location) : ''}${d.awb ? '<br><span style="color:var(--muted);">AWB: ' + escapeHTML(d.awb) + '</span>' : ''}</div>`;
+    const body = tl.length
+      ? tl.map(t => `
+          <div class="track-item">
+            <div class="track-item-title">${escapeHTML(t.title || '')}</div>
+            <div class="track-item-time">${[formatDate(t.time) || t.time || '', t.location].filter(Boolean).map(escapeHTML).join(' · ')}</div>
+          </div>`).join('')
+      : `<div class="empty">Abhi koi tracking update nahi hai.</div>`;
+    document.getElementById('trackModalBody').innerHTML = head + body;
+  }catch(err){
+    document.getElementById('trackModalBody').innerHTML = `<div class="empty">Tracking nahi mili.</div>`;
+  }
 }
 
 async function deleteRequest(id){
