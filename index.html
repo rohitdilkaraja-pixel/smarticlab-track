@@ -1366,6 +1366,17 @@ async function prefetchTrackingStatus(){
   if(o.exchange_delivery_tracking || o.return_tracking) return;   // inka apna flow hai
   if(!o.awb && !o.live_status_label) return;                      // abhi dispatch hi nahi hua
 
+  // lookup-order pehle hi poora courier timeline bhej deta hai (Get Real Delivery
+  // Status -> Merge Delivery Status). Pehle yahan se dobara /track-order call hoti
+  // thi -- wahi 50+ scans doosri baar, aur pehla paint ~1.9s late. Ab jo data aa
+  // chuka hai usi par detect kar lete hain, network par jaate hi nahi.
+  if(Array.isArray(o.timeline) && o.timeline.length){
+    const det = detectCancelInTimeline(o.timeline);
+    if(det) applyDetectedCancellation(det, { courier: o.courier || '' });
+    return;
+  }
+
+  // Timeline nahi aayi (tracking abhi hai hi nahi, ya purana cached order) — tabhi fetch.
   try{
     const url = `${CONFIG.trackOrderUrl}?mode=order&value=${encodeURIComponent(o.number)}&contact=${encodeURIComponent(state.identifier)}`;
     const res = await fetch(url);
