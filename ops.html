@@ -247,6 +247,11 @@
     align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
   }
   #trackModalOverlay.show{display:flex;}
+  #refundQRModal{
+    display:none; position:fixed; inset:0; background:rgba(15,23,38,.55); z-index:215;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  #refundQRModal.show{display:flex;}
   #logModalOverlay{
     display:none; position:fixed; inset:0; background:rgba(15,23,38,.55); z-index:210;
     align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
@@ -402,6 +407,7 @@
   <button class="nav-item" data-filter="extended" onclick="setFilter('extended')"><span class="ic">🕐</span>Extended Windows</button>
   <button class="nav-item" data-filter="deleted" onclick="setFilter('deleted')"><span class="ic">🗑</span>Deleted</button>
   <button class="nav-item" data-filter="lookup" onclick="setFilter('lookup')"><span class="ic">🔎</span>Order Lookup</button>
+  <button class="nav-item" data-filter="refunds" onclick="setFilter('refunds')"><span class="ic">💰</span>Refund Management<span class="ct" id="navRefunds">0</span></button>
 
   <div class="sb-foot">
     <button class="nav-item" onclick="closeSidebar(); openExtendWindow()"><span class="ic">⏱</span>Extend Window</button>
@@ -569,7 +575,19 @@
   </div>
 </div>
 
+<div id="refundQRModal">
+  <div class="track-modal">
+    <h2>💰 Refund Payment</h2>
+    <div class="sub" id="refundQRTitle"></div>
+    <div id="refundQRBody"></div>
+    <button class="track-close-btn" onclick="closeRefundQR()">Close</button>
+  </div>
+</div>
+
 <div id="toast"></div>
+
+<!-- UPI QR ke liye. cdnjs wahi source hai jo JsBarcode ke liye pehle se use hota hai. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <script>
 /* ============================================================================
@@ -813,7 +831,7 @@ function renderStats(){
 const FILTER_LABELS = {
   all: 'All', pending: 'Needs Decision', approved: 'Approved', disapproved: 'Rejected',
   awb_pending: 'Pickup to Generate', qc_pending: 'QC Pending', extended: 'Extended Windows', deleted: 'Deleted',
-  lookup: 'Order Lookup'
+  lookup: 'Order Lookup', refunds: 'Refund Management'
 };
 const TYPE_LABELS = { all: 'Requests', Return: 'Returns', Exchange: 'Exchanges' };
 
@@ -825,7 +843,7 @@ function syncNav(){
   document.querySelectorAll('#typeSwitch button').forEach(b =>
     b.classList.toggle('active', b.dataset.type === currentType));
 
-  const special = currentFilter === 'extended' || currentFilter === 'deleted' || currentFilter === 'lookup';
+  const special = currentFilter === 'extended' || currentFilter === 'deleted' || currentFilter === 'lookup' || currentFilter === 'refunds';
   document.getElementById('typeSwitch').style.display = special ? 'none' : 'flex';
 
   let title;
@@ -837,7 +855,7 @@ function syncNav(){
 
 function setType(t){
   currentType = t;
-  if(currentFilter === 'extended' || currentFilter === 'deleted' || currentFilter === 'lookup') currentFilter = 'all';
+  if(currentFilter === 'extended' || currentFilter === 'deleted' || currentFilter === 'lookup' || currentFilter === 'refunds') currentFilter = 'all';
   closeSidebar();
   renderStats();
   syncNav();
@@ -858,6 +876,8 @@ function setFilter(f){
     loadDeletedRequests();
   }else if(f === 'lookup'){
     renderLookupForm();
+  }else if(f === 'refunds'){
+    renderRefunds();
   }else{
     renderList();
   }
@@ -867,6 +887,7 @@ function refreshCurrent(){
   if(currentFilter === 'extended') loadExtendedWindows();
   else if(currentFilter === 'deleted') loadDeletedRequests();
   else if(currentFilter === 'lookup') renderLookupForm();
+  else if(currentFilter === 'refunds') loadRequests();
   else loadRequests();
 }
 
@@ -1124,6 +1145,296 @@ async function trackAny(kind, value, contact, label){
   }catch(err){
     document.getElementById('trackModalBody').innerHTML = `<div class="empty">Tracking nahi mili.</div>`;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   REFUND MANAGEMENT — status, dashboard, UPI QR aur WhatsApp sharing.
+   Koi naya table nahi: sab kuch return_exchange_requests ke maujooda columns
+   se banta hai (qc_status, bank_details_*, upi_id, refund_*).
+   --------------------------------------------------------------------------- */
+
+// Refund ki avastha maujooda columns se nikaalte hain -- ek hi jagah, taaki
+// dashboard aur card dono ek hi sach bolein.
+function refundStatusOf(r){
+  if(r.refund_completed_at)        return { key:'completed',    label:'Refund Completed',     dot:'\u{1F7E2}', color:'#0A7A42' };
+  if(r.bank_details_submitted_at){
+    const hasUpi = r.bank_details_method === 'upi' && r.upi_id;
+    return hasUpi
+      ? { key:'upi_added',   label:'UPI Added — Refund Pending',  dot:'\u{1F535}', color:'#1D4ED8' }
+      : { key:'bank_added',  label:'Bank Details Added — Refund Pending', dot:'\u{1F535}', color:'#1D4ED8' };
+  }
+  if(r.qc_status === 'passed')     return { key:'details_pending', label:'UPI/Bank Details Pending', dot:'\u{1F7E0}', color:'#B45309' };
+  if(r.qc_status === 'fail' || r.qc_status === 'fail_hub')
+                                   return { key:'qc_failed',    label:'QC Failed — Action Required', dot:'\u{1F534}', color:'#9E2B2B' };
+  if(r.awb_number)                 return { key:'qc_pending',   label:'Quality Check Pending', dot:'\u{1F7E1}', color:'#92400E' };
+  return { key:'received', label:'Return Received', dot:'\u{1F7E1}', color:'#92400E' };
+}
+
+// Sirf Return type par refund banta hai; Exchange me paisa wapas nahi jaata.
+function refundCases(){
+  return (requests || []).filter(r =>
+    (r.type || '').toLowerCase() === 'return' &&
+    (r.status === 'approved' || r.refund_completed_at));
+}
+
+function refundBadgeHTML(st){
+  return `<span style="display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; color:${st.color}; background:${st.color}1a; white-space:nowrap;">${st.dot} ${escapeHTML(st.label)}</span>`;
+}
+
+function renderRefunds(){
+  const cases = refundCases();
+  const byKey = {};
+  cases.forEach(r => { const k = refundStatusOf(r).key; byKey[k] = (byKey[k]||0)+1; });
+
+  const navCt = document.getElementById('navRefunds');
+  if(navCt) navCt.textContent = cases.filter(r => !r.refund_completed_at).length;
+
+  const stat = (label, value, note) => `
+    <div style="flex:1 1 128px; min-width:128px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:#fff;">
+      <div style="font-size:19px; font-weight:800; line-height:1.1;">${value}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:3px;">${escapeHTML(label)}</div>
+      ${note ? `<div style="font-size:10px; color:var(--muted); margin-top:2px;">${escapeHTML(note)}</div>` : ''}
+    </div>`;
+
+  const pending = cases.filter(r => !r.refund_completed_at).length;
+  const upiAdded = cases.filter(r => refundStatusOf(r).key === 'upi_added').length;
+  const bankAdded = cases.filter(r => refundStatusOf(r).key === 'bank_added').length;
+  const awaiting = upiAdded + bankAdded;
+  const done = cases.filter(r => r.refund_completed_at).length;
+
+  const listEl = document.getElementById('list');
+  listEl.innerHTML = `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+      ${stat('Total Refunds', cases.length)}
+      ${stat('Refunds Pending', pending)}
+      ${stat('UPI Details Added', upiAdded)}
+      ${stat('Bank Details Added', bankAdded)}
+      ${stat('Awaiting Payment', awaiting)}
+      ${stat('Refunds Completed', done)}
+    </div>
+    <div class="req-card neutral-card" style="margin-bottom:12px; padding:10px 12px;">
+      <div style="font-size:11.5px; color:var(--muted);">
+        ⚠️ Refund <b>amount</b> abhi kahin store nahi hota — isliye "Total / Pending / Completed Refund Amount"
+        yahan nahi dikh sakte. QR banate waqt operator amount khud daalta hai aur confirm karta hai.
+        Amount column add karne ka SQL chat me diya hai.
+      </div>
+    </div>
+    <div id="refundList"></div>`;
+
+  const box = document.getElementById('refundList');
+  if(!cases.length){ box.innerHTML = `<div class="empty">Abhi koi refund case nahi hai.</div>`; return; }
+
+  const order = ['qc_failed','upi_added','bank_added','details_pending','qc_pending','received','completed'];
+  cases.sort((a,b) => order.indexOf(refundStatusOf(a).key) - order.indexOf(refundStatusOf(b).key));
+  box.innerHTML = cases.map(refundRowHTML).join('');
+}
+
+function refundRowHTML(r){
+  const st = refundStatusOf(r);
+  const qc = r.qc_status ? escapeHTML(r.qc_status) : 'pending';
+  // Bank account number kabhi poora nahi dikhate -- sirf aakhri 4 digit.
+  const acc = r.bank_account_number ? ('••••' + String(r.bank_account_number).slice(-4)) : '';
+  const payTo = (r.bank_details_method === 'upi' && r.upi_id)
+    ? `UPI: ${escapeHTML(r.upi_id)}`
+    : (acc ? `A/C: ${acc} · IFSC: ${escapeHTML(r.bank_ifsc || '')}` : '—');
+
+  const canQR = r.bank_details_method === 'upi' && r.upi_id && !r.refund_completed_at;
+  const actions = canQR
+    ? `<button class="save-awb-btn" style="flex:1; min-width:150px;" onclick="openRefundQR('${r.id}')">\u{1F4F1} Generate QR &amp; Share</button>`
+    : '';
+
+  return `
+    <div class="req-card neutral-card" style="margin-bottom:10px;">
+      <div class="req-top">
+        <div>
+          <div class="req-order">Order #${escapeHTML(r.order_number || '')}</div>
+          <div class="req-date">${formatDate(r.requested_at) || ''}</div>
+        </div>
+        <div>${refundBadgeHTML(st)}</div>
+      </div>
+      <div class="req-product" style="margin-top:6px">${escapeHTML(r.product_name || '')}</div>
+      <div class="req-meta"><b>${escapeHTML(r.pickup_name || '')}</b>${r.pickup_phone ? ' · ' + escapeHTML(r.pickup_phone) : ''}</div>
+      <div class="req-meta">QC: ${qc}${r.qc_checked_at ? ' · ' + (formatDate(r.qc_checked_at)||'') : ''}</div>
+      <div class="req-meta">${payTo}${r.bank_details_submitted_at ? ' · added ' + (formatDate(r.bank_details_submitted_at)||'') : ''}</div>
+      ${r.refund_completed_at
+        ? `<div class="req-meta" style="color:#0A7A42;">✅ Txn: ${escapeHTML(r.refund_transaction_id || '—')} · ${formatDate(r.refund_completed_at)||''}</div>`
+        : ''}
+      ${actions ? `<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">${actions}</div>` : ''}
+    </div>`;
+}
+
+/* ----- UPI QR + shareable refund card ----- */
+const UPI_RE = /^[a-zA-Z0-9._-]{2,64}@[a-zA-Z][a-zA-Z0-9.\-]{1,63}$/;
+let refundQRState = null;
+
+function openRefundQR(id){
+  const r = (requests || []).find(x => x.id === id);
+  if(!r) return;
+  if(!(r.bank_details_method === 'upi' && r.upi_id)){
+    toast('Is case me UPI ID nahi hai — QR sirf UPI par banta hai.');
+    return;
+  }
+  refundQRState = { r, blob: null, amount: null };
+  document.getElementById('refundQRModal').classList.add('show');
+  document.getElementById('refundQRTitle').textContent = `Order #${r.order_number || ''}`;
+  document.getElementById('refundQRBody').innerHTML = `
+    <div class="req-meta" style="margin-bottom:8px;"><b>${escapeHTML(r.pickup_name || '')}</b></div>
+    <div class="req-meta">${escapeHTML(r.product_name || '')}</div>
+    <div class="req-meta" style="margin-bottom:10px;">UPI: <b>${escapeHTML(r.upi_id)}</b></div>
+    <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Refund amount (₹)</label>
+    <input type="number" id="refundAmt" min="1" step="0.01" placeholder="e.g. 799"
+      style="width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-family:inherit; font-size:13px;">
+    <div style="font-size:11px; color:var(--muted); margin-top:4px;">QR isi amount ka banega — bhejne se pehle theek se check kar lo.</div>
+    <button class="save-awb-btn" style="width:100%; margin-top:10px;" onclick="buildRefundQR()">Generate QR</button>
+    <div id="refundQROut" style="margin-top:12px;"></div>`;
+}
+
+function closeRefundQR(){
+  document.getElementById('refundQRModal').classList.remove('show');
+  refundQRState = null;
+}
+
+async function buildRefundQR(){
+  const st = refundQRState; if(!st) return;
+  const r = st.r;
+  const amt = parseFloat((document.getElementById('refundAmt').value || '').trim());
+  if(!(amt > 0)){ toast('Sahi amount daalo.'); return; }
+  if(!UPI_RE.test(String(r.upi_id).trim())){
+    toast('Ye UPI ID sahi format me nahi hai — QR nahi banaya.');
+    return;
+  }
+  st.amount = amt;
+
+  const upi = String(r.upi_id).trim();
+  const note = `Refund order ${r.order_number || ''}`;
+  const payload = 'upi://pay?pa=' + encodeURIComponent(upi)
+    + '&pn=' + encodeURIComponent(r.pickup_name || 'Customer')
+    + '&am=' + encodeURIComponent(amt.toFixed(2))
+    + '&cu=INR'
+    + '&tn=' + encodeURIComponent(note)
+    + '&tr=' + encodeURIComponent('RF' + (r.order_number || ''));
+
+  const out = document.getElementById('refundQROut');
+  out.innerHTML = `<div id="qrHolder" style="display:flex; justify-content:center;"></div>
+    <div id="refundCardWrap" style="margin-top:10px;"></div>`;
+  const holder = document.getElementById('qrHolder');
+  holder.innerHTML = '';
+  try{
+    new QRCode(holder, { text: payload, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+  }catch(e){
+    out.innerHTML = `<div class="empty">QR library load nahi hui — page refresh karke dobara try karo.</div>`;
+    return;
+  }
+
+  // qrcodejs canvas ya img dono de sakta hai -- dono handle karo
+  await new Promise(res => setTimeout(res, 60));
+  const qrCanvas = holder.querySelector('canvas');
+  const qrImg = holder.querySelector('img');
+  const src = qrCanvas ? qrCanvas.toDataURL('image/png') : (qrImg ? qrImg.src : null);
+  if(!src){ out.innerHTML += `<div class="empty">QR banane me dikkat aayi.</div>`; return; }
+
+  const blob = await drawRefundCard(r, amt, src);
+  st.blob = blob;
+  const url = URL.createObjectURL(blob);
+  document.getElementById('refundCardWrap').innerHTML = `
+    <img src="${url}" alt="Refund card" style="width:100%; border:1px solid var(--border); border-radius:var(--radius-sm);">
+    <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+      <button class="save-awb-btn" style="flex:1; min-width:140px;" onclick="shareRefundCard()">\u{1F4E4} Share Refund</button>
+      <button class="extend-fetch-btn" style="flex:1; min-width:120px;" onclick="shareRefundWhatsApp()">\u{1F4AC} WhatsApp</button>
+      <button class="extend-fetch-btn" style="flex:1; min-width:120px;" onclick="downloadRefundCard()">⬇️ Download</button>
+    </div>
+    <div style="font-size:11px; color:var(--muted); margin-top:8px;">
+      QR banne se refund complete nahi hota. Payment hone ke baad request card me jaakar
+      transaction ID daal kar "Mark Refund Complete" karna hoga.
+    </div>`;
+}
+
+// Card canvas par banate hain taaki WhatsApp par ek hi image jaaye.
+function drawRefundCard(r, amt, qrDataUrl){
+  return new Promise(resolve => {
+    const W = 720, H = 1040;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    x.fillStyle = '#ffffff'; x.fillRect(0,0,W,H);
+    x.fillStyle = '#0f172a'; x.fillRect(0,0,W,108);
+    x.fillStyle = '#ffffff';
+    x.font = 'bold 34px system-ui, sans-serif';
+    x.fillText('Refund Payment', 40, 68);
+
+    let y = 176;
+    const row = (label, value, big) => {
+      x.fillStyle = '#64748b'; x.font = '19px system-ui, sans-serif';
+      x.fillText(label, 40, y);
+      x.fillStyle = '#0f172a';
+      x.font = (big ? 'bold 34px' : 'bold 23px') + ' system-ui, sans-serif';
+      x.fillText(String(value || '—').slice(0, 34), 40, y + (big ? 40 : 32));
+      y += big ? 96 : 80;
+    };
+    row('Customer', r.pickup_name || '—');
+    row('Order ID', '#' + (r.order_number || ''));
+    row('Product', r.product_name || '—');
+    row('Refund Amount', '₹' + amt.toFixed(2), true);
+    row('UPI ID', r.upi_id || '—');
+
+    const img = new Image();
+    img.onload = () => {
+      const size = 300, qx = (W - size) / 2, qy = y + 8;
+      x.drawImage(img, qx, qy, size, size);
+      x.fillStyle = '#64748b'; x.font = '18px system-ui, sans-serif';
+      x.textAlign = 'center';
+      x.fillText('Scan to pay this refund', W/2, qy + size + 38);
+      x.textAlign = 'left';
+      c.toBlob(b => resolve(b), 'image/png');
+    };
+    img.onerror = () => c.toBlob(b => resolve(b), 'image/png');
+    img.src = qrDataUrl;
+  });
+}
+
+function refundShareText(){
+  const st = refundQRState; if(!st) return '';
+  const r = st.r;
+  return `Refund Payment Request\n`
+    + `Order ID: #${r.order_number || ''}\n`
+    + `Product: ${r.product_name || ''}\n`
+    + `Refund Amount: ₹${Number(st.amount).toFixed(2)}\n`
+    + `UPI ID: ${r.upi_id}\n\n`
+    + `Please scan the QR code to process the refund.`;
+}
+
+async function shareRefundCard(){
+  const st = refundQRState;
+  if(!st || !st.blob){ toast('Pehle QR generate karo.'); return; }
+  const file = new File([st.blob], `refund-${st.r.order_number || 'card'}.png`, { type: 'image/png' });
+  if(navigator.canShare && navigator.canShare({ files: [file] })){
+    try{
+      await navigator.share({ files: [file], text: refundShareText() });
+      return;
+    }catch(e){ if(e && e.name === 'AbortError') return; }
+  }
+  // Browser image share nahi karta -- image download kar do, text clipboard me.
+  downloadRefundCard();
+  try{ await navigator.clipboard.writeText(refundShareText()); toast('Image download ho gayi, message copy ho gaya'); }
+  catch(e){ toast('Image download ho gayi — WhatsApp par bhej do'); }
+}
+
+function shareRefundWhatsApp(){
+  const st = refundQRState;
+  if(!st || !st.blob){ toast('Pehle QR generate karo.'); return; }
+  // wa.me sirf text le sakta hai; image alag se bhejni padti hai.
+  downloadRefundCard();
+  window.open('https://wa.me/?text=' + encodeURIComponent(refundShareText()), '_blank');
+  toast('QR image download ho gayi — WhatsApp me attach kar do');
+}
+
+function downloadRefundCard(){
+  const st = refundQRState;
+  if(!st || !st.blob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(st.blob);
+  a.download = `refund-${st.r.order_number || 'card'}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 async function deleteRequest(id){
