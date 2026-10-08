@@ -647,6 +647,8 @@
             <button class="link-btn" onclick="useNewAddress()">Use a different address</button>
           </div>
 
+          <div id="addressHint" style="display:none; margin-top:10px; font-size:13px; color:#B91C1C;"></div>
+
           <div class="modal-actions" style="margin-top:16px">
             <button class="btn-secondary" style="flex:1" onclick="backToReasonStep()">Back</button>
             <button class="btn-primary" style="flex:1" id="submitRequestBtn" onclick="submitRequest()" disabled>Submit Request</button>
@@ -2282,16 +2284,25 @@ function backToReasonStep(){
 /* ============================================================================
    PICKUP ADDRESS (prefill from WooCommerce, editable, or a fresh address)
    ============================================================================ */
+/* Phone ko 10-digit Indian mobile mein normalize karo: "+91 97739 36844", "919773936844",
+   "09773936844" sab -> "9773936844". WooCommerce aksar +91 ke saath phone deta hai. */
+function normalizePhone(p){
+  let d = String(p || '').replace(/\D/g, '');
+  if(d.length > 10 && d.startsWith('91')) d = d.slice(2);
+  if(d.length > 10 && d.startsWith('0')) d = d.replace(/^0+/, '');
+  return d.length > 10 ? d.slice(-10) : d;
+}
+
 function resetAddressToWooCommerce(){
   const wc = (state.order && state.order.shipping_address) || {};
   state.pickupAddress = {
     name: wc.name || '',
-    phone: wc.phone || '',
+    phone: normalizePhone(wc.phone),
     address_line1: wc.address_line1 || '',
     address_line2: wc.address_line2 || '',
     city: wc.city || '',
     state: wc.state || '',
-    pincode: wc.pincode || ''
+    pincode: String(wc.pincode || '').replace(/\D/g,'').slice(0,6)
   };
   state.pickupSource = 'woocommerce';
   renderAddressDisplay();
@@ -2347,7 +2358,7 @@ function bindAddressFormInputs(){
 function syncAddressFromForm(){
   state.pickupAddress = {
     name: document.getElementById('addrName').value.trim(),
-    phone: document.getElementById('addrPhone').value.replace(/\D/g,'').slice(0,10),
+    phone: normalizePhone(document.getElementById('addrPhone').value),
     address_line1: document.getElementById('addrLine1').value.trim(),
     address_line2: document.getElementById('addrLine2').value.trim(),
     city: document.getElementById('addrCity').value.trim(),
@@ -2388,8 +2399,18 @@ function validateReasonStep(){
 
 function validateAddressStep(){
   const a = state.pickupAddress || {};
-  const addressOk = a.address_line1 && a.city && a.pincode && a.pincode.length === 6 && a.phone && a.phone.length === 10;
+  const missing = [];
+  if(!a.address_line1) missing.push('address');
+  if(!a.city) missing.push('city');
+  if(!a.pincode || a.pincode.length !== 6) missing.push('6-digit pincode');
+  if(!a.phone || a.phone.length !== 10) missing.push('10-digit phone number');
+  const addressOk = missing.length === 0;
   document.getElementById('submitRequestBtn').disabled = !addressOk;
+  const hint = document.getElementById('addressHint');
+  if(hint){
+    hint.style.display = addressOk ? 'none' : 'block';
+    hint.textContent = addressOk ? '' : `Please add a valid ${missing.join(', ')} — tap "Edit address".`;
+  }
 }
 
 function closeModal(){
